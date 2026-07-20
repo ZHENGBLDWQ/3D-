@@ -114,5 +114,13 @@ export const printers = sqliteTable("printers", {
   totalHours: real("total_hours").notNull().default(0),
   maintenanceDueAt: text("maintenance_due_at"),
   notes: text("notes").notNull().default(""),
+  connectorType: text("connector_type").notNull().default("manual"),
+  connectorTokenHash: text("connector_token_hash"),
+  connectionState: text("connection_state").notNull().default("未连接"),
+  lastSeenAt: text("last_seen_at"),
+  nozzleTemp: real("nozzle_temp"),
+  bedTemp: real("bed_temp"),
+  currentFile: text("current_file"),
+  remoteProgress: real("remote_progress"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
