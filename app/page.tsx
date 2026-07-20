@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
 
 type Section =
   | "概览"
@@ -627,6 +627,9 @@ function InventoryCenter({ toast }: { toast: (message: string) => void }) {
   const [dialog, setDialog] = useState<"create" | "movement" | "stocktake" | null>(null);
   const [selectedBatch, setSelectedBatch] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [inventoryView, setInventoryView] = useState<"cards" | "table">("cards");
+  const [inventoryQuery, setInventoryQuery] = useState("");
+  const [inventoryFilter, setInventoryFilter] = useState<"all" | "active" | "sealed" | "low">("all");
 
   async function loadInventory() {
     const response = await fetch("/api/inventory", { cache: "no-store" });
@@ -664,6 +667,26 @@ function InventoryCenter({ toast }: { toast: (message: string) => void }) {
     (sum, item) => sum + Number(item.remainingGrams || 0) / Math.max(1, Number(item.spoolWeightGrams || 1000)),
     0,
   );
+  const colorValue = (color: string) => {
+    const key = color.toLowerCase();
+    const palette: Record<string, string> = { "白": "#f5f4ef", white: "#f5f4ef", "黑": "#22282a", black: "#22282a", "灰": "#8d9696", gray: "#8d9696", grey: "#8d9696", "红": "#e6534c", red: "#e6534c", "蓝": "#376fd5", blue: "#376fd5", "黄": "#f0cf3e", yellow: "#f0cf3e", "绿": "#4eaa70", green: "#4eaa70", "橙": "#ef8a3d", orange: "#ef8a3d", "紫": "#7458bb", purple: "#7458bb", "粉": "#ed7ca6", pink: "#ed7ca6" };
+    return Object.entries(palette).find(([name]) => key.includes(name))?.[1] || "#b7c1bd";
+  };
+  const materialState = (item: InventoryMaterial) => {
+    const available = Math.max(0, Number(item.remainingGrams) - Number(item.reservedGrams || 0));
+    if (available <= Number(item.lowStockGrams || 0)) return { key: "low", label: "库存不足" };
+    if (Number(item.remainingGrams) >= Number(item.spoolWeightGrams) * 0.98) return { key: "sealed", label: "未开封" };
+    return { key: "active", label: item.status === "已装入 AMS" ? "已装入 AMS" : "使用中" };
+  };
+  const normalizedQuery = inventoryQuery.trim().toLowerCase();
+  const visibleMaterials = inventory.materials.filter((item) => {
+    const state = materialState(item);
+    const matchesQuery = !normalizedQuery || [item.sku, item.material, item.color, item.brand, item.lotNo, item.location].join(" ").toLowerCase().includes(normalizedQuery);
+    return matchesQuery && (inventoryFilter === "all" || state.key === inventoryFilter);
+  });
+  const commonMaterials = [...inventory.materials]
+    .sort((a, b) => Number(b.reservedGrams || 0) - Number(a.reservedGrams || 0) || Number(b.remainingGrams || 0) - Number(a.remainingGrams || 0))
+    .slice(0, 4);
   return (
     <section className="inventory-center">
       <div className="inventory-kpis">
@@ -686,12 +709,43 @@ function InventoryCenter({ toast }: { toast: (message: string) => void }) {
           <button className="primary" onClick={() => setDialog("create")}>＋ 新建物料</button>
         </div>
       </div>
-      <div className="panel inventory-ledger-panel">
+      {commonMaterials.length > 0 && <div className="panel inventory-common-panel">
+        <div className="inventory-section-head"><div><small>QUICK ACCESS</small><h3>常用耗材</h3></div><span>按任务预占和库存量推荐</span></div>
+        <div className="inventory-common-grid">{commonMaterials.map((item) => {
+          const percent = Math.max(0, Math.min(100, Number(item.remainingGrams) / Math.max(1, Number(item.spoolWeightGrams)) * 100));
+          return <button key={item.id} onClick={() => { setSelectedBatch(item.id); setDialog("movement"); }}>
+            <span className="spool-mini" style={{ "--spool-color": colorValue(item.color), "--spool-level": `${percent}%` } as CSSProperties}><i /><i /><i /></span>
+            <span><strong>{item.material} · {item.color}</strong><small>{item.brand || "未填写品牌"} · {item.remainingGrams.toFixed(0)}g</small></span>
+          </button>;
+        })}</div>
+      </div>}
+      <div className="inventory-controls">
+        <div className="inventory-search"><span>⌕</span><input value={inventoryQuery} onChange={(event) => setInventoryQuery(event.target.value)} placeholder="搜索 SKU、材质、颜色、品牌、批次或库位" /></div>
+        <div className="inventory-filter-tabs">
+          {([['all','全部'],['active','使用中'],['sealed','未开封'],['low','库存不足']] as const).map(([value, label]) => <button key={value} className={inventoryFilter === value ? "active" : ""} onClick={() => setInventoryFilter(value)}>{label}</button>)}
+        </div>
+        <div className="inventory-view-toggle"><button className={inventoryView === "cards" ? "active" : ""} onClick={() => setInventoryView("cards")} aria-label="卡片视图">▦</button><button className={inventoryView === "table" ? "active" : ""} onClick={() => setInventoryView("table")} aria-label="表格视图">☷</button></div>
+      </div>
+      {inventoryView === "cards" ? <div className="inventory-card-grid">
+        {visibleMaterials.map((item) => {
+          const available = Math.max(0, Number(item.remainingGrams) - Number(item.reservedGrams || 0));
+          const percent = Math.max(0, Math.min(100, Number(item.remainingGrams) / Math.max(1, Number(item.spoolWeightGrams)) * 100));
+          const state = materialState(item);
+          return <article className={`inventory-spool-card ${state.key}`} key={item.id}>
+            <div className="spool-card-top"><span className="spool-visual" style={{ "--spool-color": colorValue(item.color), "--spool-level": `${percent}%` } as CSSProperties}><i /><i /><i /><i /></span><div><span className={`inventory-status ${state.key === "low" ? "low" : ""}`}>{state.label}</span><small>{item.sku}</small></div></div>
+            <div className="spool-card-title"><h3>{item.material} · {item.color}</h3><p>{item.brand || "未填写品牌"} · {item.specification || `${item.spoolWeightGrams}g/卷`}</p></div>
+            <div className="spool-progress"><div><span style={{ width: `${percent}%` }} /></div><strong>{item.remainingGrams.toFixed(0)} / {item.spoolWeightGrams.toFixed(0)} g</strong></div>
+            <dl><div><dt>可用库存</dt><dd>{available.toFixed(0)}g</dd></div><div><dt>任务预占</dt><dd>{Number(item.reservedGrams || 0).toFixed(0)}g</dd></div><div><dt>库存价值</dt><dd>RM {(Number(item.remainingGrams) * Number(item.costPerKg || 0) / 1000).toFixed(2)}</dd></div><div><dt>仓库 / 库位</dt><dd>{item.warehouse} · {item.location || "未设置"}</dd></div></dl>
+            <div className="spool-card-actions"><button onClick={() => { setSelectedBatch(item.id); setDialog("movement"); }}>出入库</button><button onClick={() => { setSelectedBatch(item.id); setDialog("stocktake"); }}>盘点</button></div>
+          </article>;
+        })}
+        {visibleMaterials.length === 0 && <div className="empty-state inventory-empty-card">没有符合条件的耗材。</div>}
+      </div> : <div className="panel inventory-ledger-panel">
         <div className="table-wrap">
           <table>
             <thead><tr><th>物料 / SKU</th><th>规格与批次</th><th>账面库存</th><th>预占 / 可用</th><th>单位成本</th><th>库存价值</th><th>库位</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>
-              {inventory.materials.map((item) => {
+              {visibleMaterials.map((item) => {
                 const available = Math.max(0, Number(item.remainingGrams) - Number(item.reservedGrams || 0));
                 const low = available <= Number(item.lowStockGrams || 0);
                 return <tr key={item.id} className={low ? "inventory-low-row" : ""}>
@@ -706,11 +760,11 @@ function InventoryCenter({ toast }: { toast: (message: string) => void }) {
                   <td><div className="row-actions"><button onClick={() => { setSelectedBatch(item.id); setDialog("movement"); }}>出入库</button><button onClick={() => { setSelectedBatch(item.id); setDialog("stocktake"); }}>盘点</button></div></td>
                 </tr>;
               })}
-              {inventory.materials.length === 0 && <tr><td colSpan={9}><div className="empty-state">暂无耗材，请先建立物料主档。</div></td></tr>}
+              {visibleMaterials.length === 0 && <tr><td colSpan={9}><div className="empty-state">没有符合条件的耗材。</div></td></tr>}
             </tbody>
           </table>
         </div>
-      </div>
+      </div>}
       <div className="panel inventory-flow-panel">
         <PanelHead eyebrow="PERPETUAL LEDGER" title="库存流水 · 最近 300 笔" action="刷新 ↻" onClick={() => void loadInventory()} />
         <div className="table-wrap"><table><thead><tr><th>时间</th><th>单据号</th><th>物料</th><th>业务类型</th><th>数量</th><th>仓库 / 经办人</th><th>来源 / 备注</th></tr></thead><tbody>
