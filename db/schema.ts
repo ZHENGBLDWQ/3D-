@@ -51,3 +51,21 @@ export const inventoryTransactions = sqliteTable("inventory_transactions", {
   note: text("note").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const orderItems = sqliteTable("order_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  orderId: integer("order_id").notNull().references(() => orders.id),
+  itemId: integer("item_id").notNull().references(() => printItems.id),
+  quantity: integer("quantity").notNull().default(1),
+  unitPrice: real("unit_price").notNull().default(0),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const itemMaterials = sqliteTable("item_materials", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  itemId: integer("item_id").notNull().references(() => printItems.id),
+  batchId: integer("batch_id").notNull().references(() => materialBatches.id),
+  gramsPerItem: real("grams_per_item").notNull(),
+  wastePercent: real("waste_percent").notNull().default(5),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
