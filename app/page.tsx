@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
-type Section = "概览" | "打印物品" | "耗材库存" | "订单" | "打印队列" | "生产明细" | "文件资产" | "设备管理";
+type Section = "概览" | "打印物品" | "耗材库存" | "耗材卷同步" | "订单" | "打印队列" | "生产明细" | "文件资产" | "设备管理";
 type Entity = "item" | "material" | "order" | "job";
 type Item = { id:number; sku:string; name:string; category:string; estimatedGrams:number; estimatedMinutes:number };
 type Material = { id:number; material:string; color:string; brand:string; initialGrams:number; remainingGrams:number; lowStockGrams:number };
@@ -11,7 +11,7 @@ type Job = { id:number; jobNo:string; itemId:number|null; itemName:string|null; 
 type WorkspaceData = { items:Item[]; materials:Material[]; orders:Order[]; jobs:Job[] };
 
 const nav: { label:Section; mark:string }[] = [
-  { label:"概览", mark:"⌂" }, { label:"打印物品", mark:"◇" }, { label:"耗材库存", mark:"◉" }, { label:"订单", mark:"▤" }, { label:"打印队列", mark:"▷" }, { label:"生产明细", mark:"≋" }, { label:"文件资产", mark:"▱" }, { label:"设备管理", mark:"▣" },
+  { label:"概览", mark:"⌂" }, { label:"打印物品", mark:"◇" }, { label:"耗材库存", mark:"◉" }, { label:"耗材卷同步", mark:"◍" }, { label:"订单", mark:"▤" }, { label:"打印队列", mark:"▷" }, { label:"生产明细", mark:"≋" }, { label:"文件资产", mark:"▱" }, { label:"设备管理", mark:"▣" },
 ];
 const emptyData:WorkspaceData = { items:[], materials:[], orders:[], jobs:[] };
 const entityBySection:Record<"打印物品"|"耗材库存"|"订单"|"打印队列",Entity> = { "打印物品":"item", "耗材库存":"material", "订单":"order", "打印队列":"job" };
@@ -45,7 +45,7 @@ export default function Home() {
   }, []);
 
   function toast(message:string) { setNotice(message); window.setTimeout(() => setNotice(""),2600); }
-  function openCreate() { if(["生产明细","文件资产","设备管理"].includes(section)) return; setModal(section === "概览" ? "job" : entityBySection[section]); }
+  function openCreate() { if(["生产明细","文件资产","设备管理","耗材卷同步"].includes(section)) return; setModal(section === "概览" ? "job" : entityBySection[section]); }
   async function remove(entity:Entity,id:number) {
     if (!window.confirm("确定删除这条记录吗？此操作不可撤销。")) return;
     const response = await fetch(`/api/workspace?entity=${entity}&id=${id}`, { method:"DELETE" });
@@ -80,10 +80,10 @@ export default function Home() {
       <div className="sidebar-bottom"><div className="system-state"><i/> {loading?"正在同步数据":"数据已同步"}</div><button onClick={() => toast("设置中心将在设备接入阶段开放")}>⚙ 系统设置</button><div className="profile"><span>郑</span><div><strong>管理员</strong><small>私有工作区</small></div><em>•••</em></div></div>
     </aside>
     <section className="content">
-      <header className="topbar"><div><p>生产控制台</p><h1>{section}</h1></div><div className="top-actions"><label className="search"><span>⌕</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索当前数据"/></label><button className="icon-btn" aria-label="通知">♢<i/></button>{!(["生产明细","文件资产","设备管理"] as Section[]).includes(section)&&<button className="primary" onClick={openCreate}>＋ 新建{section==="概览"?"任务":section}</button>}</div></header>
+      <header className="topbar"><div><p>生产控制台</p><h1>{section}</h1></div><div className="top-actions"><label className="search"><span>⌕</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索当前数据"/></label><button className="icon-btn" aria-label="通知">♢<i/></button>{!(["生产明细","文件资产","设备管理","耗材卷同步"] as Section[]).includes(section)&&<button className="primary" onClick={openCreate}>＋ 新建{section==="概览"?"任务":section}</button>}</div></header>
       <div className="workspace">
         <div className="date-row"><div><span className="live-dot"/> {loading?"正在读取生产数据":"实时生产数据"}</div><time>2026年7月20日 · 星期一</time></div>
-        {section === "概览" ? <Dashboard data={data} metrics={{printing,waiting,completed,alerts}} onNavigate={setSection} onAdvance={advanceJob}/> : section === "生产明细" ? <ProductionDetails data={data} toast={toast} onWorkspaceChanged={loadData}/> : section === "文件资产" ? <FileAssets data={data} toast={toast}/> : section === "设备管理" ? <PrinterManager toast={toast}/> : <Management section={section} filtered={filtered} onDelete={remove} onAction={runJobAction}/>}
+        {section === "概览" ? <Dashboard data={data} metrics={{printing,waiting,completed,alerts}} onNavigate={setSection} onAdvance={advanceJob}/> : section === "生产明细" ? <ProductionDetails data={data} toast={toast} onWorkspaceChanged={loadData}/> : section === "文件资产" ? <FileAssets data={data} toast={toast}/> : section === "设备管理" ? <PrinterManager toast={toast}/> : section === "耗材卷同步" ? <SpoolmanInventory toast={toast}/> : <Management section={section} filtered={filtered} onDelete={remove} onAction={runJobAction}/>}
       </div>
     </section>
     {modal ? <CreateModal entity={modal} data={data} onClose={() => setModal(null)} onSaved={async () => { setModal(null); toast("记录已保存"); await loadData(); }}/> : null}
@@ -156,6 +156,9 @@ function JobActions({job,onAction,onDelete}:{job:Job;onAction:(j:Job,a:string)=>
   };
   return <div className="row-actions job-actions">{(actions[job.status]||[]).map(a=><button key={a.key} onClick={()=>onAction(job,a.key)}>{a.label}</button>)}{!["打印中","已暂停"].includes(job.status)&&<button className="danger-link" onClick={onDelete}>删除</button>}</div>;
 }
+
+type SyncedSpool={id:number;externalId:number;filamentName:string;vendor:string;material:string;colorHex:string;initialWeight:number|null;remainingWeight:number|null;usedWeight:number|null;location:string;lotNr:string;archived:boolean;lastUsed:string|null;lastSeenAt:string};
+function SpoolmanInventory({toast}:{toast:(m:string)=>void}){const [spools,setSpools]=useState<SyncedSpool[]>([]);const [loading,setLoading]=useState(true);async function load(){setLoading(true);const response=await fetch("/api/spools",{cache:"no-store"});const result=await response.json();setLoading(false);if(response.ok)setSpools(result.spools);else toast(result.error||"耗材卷读取失败");}useEffect(()=>{void load();},[]);const active=spools.filter(s=>!s.archived);const total=active.reduce((sum,s)=>sum+(s.remainingWeight||0),0);return <section><div className="spool-summary"><div><small>SPOOLMAN STATUS</small><strong>{active.length}</strong><span>可用耗材卷</span></div><div><small>REMAINING</small><strong>{Math.round(total)}g</strong><span>同步剩余重量</span></div><div><small>LAST SYNC</small><strong>{spools[0]?new Date(spools[0].lastSeenAt).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"}):"--"}</strong><span>由本地代理更新</span></div></div><div className="panel"><PanelHead eyebrow="SPOOLMAN INVENTORY" title="耗材卷库存" action={loading?"同步中…":"刷新 ↻"} onClick={()=>void load()}/><div className="spool-grid">{spools.map(spool=>{const capacity=spool.initialWeight||((spool.remainingWeight||0)+(spool.usedWeight||0));const percent=capacity?Math.max(0,Math.min(100,(spool.remainingWeight||0)/capacity*100)):0;return <article className={`spool-card ${spool.archived?"archived":""}`} key={spool.id}><div className="spool-ring" style={{"--spool-color":spool.colorHex?`#${spool.colorHex.replace("#","")}`:"#8c9b95","--spool-level":`${percent}%`} as React.CSSProperties}><i/></div><div><div className="spool-title"><strong>#{spool.externalId} · {spool.filamentName||spool.material||"未命名耗材"}</strong><span>{spool.archived?"已归档":percent<20?"低库存":"可用"}</span></div><p>{spool.vendor||"未知厂商"} · {spool.material||"未知材质"} · {spool.location||"未设置位置"}</p><div className="spool-weight"><b>{Math.round(spool.remainingWeight||0)}g</b><span>剩余 / {Math.round(capacity||0)}g</span></div><div className="spool-bar"><i style={{width:`${percent}%`}}/></div><small>批次 {spool.lotNr||"--"}{spool.lastUsed?` · 最近使用 ${new Date(spool.lastUsed).toLocaleDateString("zh-CN")}`:""}</small></div></article>})}{!loading&&spools.length===0&&<div className="empty-state">尚未收到 Spoolman 数据。请在本地代理设置 SPOOLMAN_URL。</div>}</div></div></section>}
 
 type PrintFile={id:number;itemId:number|null;itemName:string|null;filename:string;kind:string;version:string;sizeBytes:number;contentType:string;printerProfile:string;layerHeight:number|null;infillPercent:number|null;estimatedMinutes:number|null;notes:string;createdAt:string};
 function FileAssets({data,toast}:{data:WorkspaceData;toast:(m:string)=>void}){

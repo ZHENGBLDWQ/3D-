@@ -57,6 +57,13 @@
       "when": 1784520287288,
       "tag": "0007_funny_winter_soldier",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1784520551646,
+      "tag": "0008_lying_big_bertha",
+      "breakpoints": true
     }
   ]
 }

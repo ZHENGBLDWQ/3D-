@@ -135,3 +135,21 @@ export const printerCommands = sqliteTable("printer_commands", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   completedAt: text("completed_at"),
 });
+
+export const spoolmanSpools = sqliteTable("spoolman_spools", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  externalId: integer("external_id").notNull().unique(),
+  filamentName: text("filament_name").notNull().default(""),
+  vendor: text("vendor").notNull().default(""),
+  material: text("material").notNull().default(""),
+  colorHex: text("color_hex").notNull().default(""),
+  initialWeight: real("initial_weight"),
+  remainingWeight: real("remaining_weight"),
+  usedWeight: real("used_weight"),
+  location: text("location").notNull().default(""),
+  lotNr: text("lot_nr").notNull().default(""),
+  archived: integer("archived", { mode: "boolean" }).notNull().default(false),
+  lastUsed: text("last_used"),
+  syncedByPrinterId: integer("synced_by_printer_id").references(() => printers.id),
+  lastSeenAt: text("last_seen_at").notNull(),
+});

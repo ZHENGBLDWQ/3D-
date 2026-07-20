@@ -13,6 +13,8 @@ PRINTER_URL = os.environ.get("PRINTER_URL", "http://127.0.0.1:7125").rstrip("/")
 CONNECTOR = os.environ.get("PRINTER_CONNECTOR", "moonraker").lower()
 PRINTER_API_KEY = os.environ.get("PRINTER_API_KEY", "")
 INTERVAL = max(5, int(os.environ.get("POLL_INTERVAL", "10")))
+SPOOLMAN_URL = os.environ.get("SPOOLMAN_URL", "").rstrip("/")
+SPOOLMAN_INTERVAL = max(30, int(os.environ.get("SPOOLMAN_INTERVAL", "60")))
 
 def request_json(url, method="GET", data=None, headers=None):
     body = json.dumps(data).encode() if data is not None else None
@@ -52,6 +54,15 @@ def octoprint_status():
     temps = printer.get("temperature", {})
     return {"state": state, "nozzleTemp": temps.get("tool0", {}).get("actual"), "bedTemp": temps.get("bed", {}).get("actual"), "filename": job.get("job", {}).get("file", {}).get("name"), "progress": job.get("progress", {}).get("completion")}
 
+def spoolman_spools():
+    rows = request_json(f"{SPOOLMAN_URL}/api/v1/spool")
+    result = []
+    for spool in rows:
+        filament = spool.get("filament") or {}
+        vendor = filament.get("vendor") or {}
+        result.append({"id": spool["id"], "filamentName": filament.get("name"), "vendor": vendor.get("name") if isinstance(vendor, dict) else str(vendor), "material": filament.get("material"), "colorHex": filament.get("color_hex"), "initialWeight": spool.get("initial_weight"), "remainingWeight": spool.get("remaining_weight"), "usedWeight": spool.get("used_weight"), "location": spool.get("location"), "lotNr": spool.get("lot_nr"), "archived": spool.get("archived", False), "lastUsed": spool.get("last_used")})
+    return result
+
 def report(payload):
     return request_json(f"{CLOUD_URL}/api/agent", "POST", payload, {"Authorization": f"Bearer {TOKEN}"})
 
@@ -76,9 +87,16 @@ def execute_command(command):
 
 def main():
     print(f"LayerTrace agent started: {CONNECTOR} @ {PRINTER_URL}")
+    last_spool_sync = 0
     while True:
         try:
             payload = moonraker_status() if CONNECTOR == "moonraker" else octoprint_status()
+            if SPOOLMAN_URL and time.time() - last_spool_sync >= SPOOLMAN_INTERVAL:
+                try:
+                    payload["spools"] = spoolman_spools()
+                    last_spool_sync = time.time()
+                except (urllib.error.URLError, KeyError, ValueError, TimeoutError) as spool_error:
+                    print(time.strftime("%F %T"), "Spoolman sync failed:", spool_error)
             result = report(payload)
             print(time.strftime("%F %T"), result.get("printer", {}).get("name"), payload["state"], payload.get("progress"))
             command = result.get("command")
