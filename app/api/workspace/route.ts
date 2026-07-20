@@ -21,10 +21,10 @@ async function seedIfEmpty() {
     { orderNo: "ORD-0270", customer: "创客空间", status: "待确认", dueAt: "2026-07-23" },
   ]).returning();
   await db.insert(materialBatches).values([
-    { material: "PLA", color: "岩石灰", brand: "Bambu Lab", initialGrams: 1000, remainingGrams: 742, lowStockGrams: 200 },
-    { material: "PETG", color: "碳黑", brand: "eSUN", initialGrams: 1000, remainingGrams: 186, lowStockGrams: 200 },
-    { material: "ABS", color: "深蓝", brand: "Polymaker", initialGrams: 1000, remainingGrams: 524, lowStockGrams: 200 },
-    { material: "TPU", color: "橙色", brand: "Overture", initialGrams: 500, remainingGrams: 94, lowStockGrams: 120 },
+    { material: "PLA", color: "岩石灰", brand: "Bambu Lab", initialGrams: 1000, remainingGrams: 742, lowStockGrams: 200, costPerKg: 120 },
+    { material: "PETG", color: "碳黑", brand: "eSUN", initialGrams: 1000, remainingGrams: 186, lowStockGrams: 200, costPerKg: 95 },
+    { material: "ABS", color: "深蓝", brand: "Polymaker", initialGrams: 1000, remainingGrams: 524, lowStockGrams: 200, costPerKg: 110 },
+    { material: "TPU", color: "橙色", brand: "Overture", initialGrams: 500, remainingGrams: 94, lowStockGrams: 120, costPerKg: 180 },
   ]);
   await db.insert(printJobs).values([
     { jobNo: "JOB-042", itemId: insertedItems[0].id, orderId: insertedOrders[0].id, printerName: "Voron 2.4", status: "打印中", progress: 68 },
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
     if (payload.entity === "material") {
       if (!payload.material || !payload.color) return Response.json({ error: "材料类型和颜色必填" }, { status: 400 });
       const initial = Number(payload.initialGrams || 1000);
-      const [row] = await db.insert(materialBatches).values({ material: String(payload.material), color: String(payload.color), brand: String(payload.brand || ""), initialGrams: initial, remainingGrams: Number(payload.remainingGrams ?? initial), lowStockGrams: Number(payload.lowStockGrams || 200) }).returning();
+      const [row] = await db.insert(materialBatches).values({ material: String(payload.material), color: String(payload.color), brand: String(payload.brand || ""), initialGrams: initial, remainingGrams: Number(payload.remainingGrams ?? initial), lowStockGrams: Number(payload.lowStockGrams || 200), costPerKg:Number(payload.costPerKg||0) }).returning();
       return Response.json({ row }, { status: 201 });
     }
     if (payload.entity === "order") {
@@ -91,6 +91,7 @@ export async function POST(request: Request) {
       const [row] = await db.insert(printJobs).values({ jobNo: String(payload.jobNo), itemId: payload.itemId ? Number(payload.itemId) : null, orderId: payload.orderId ? Number(payload.orderId) : null, printerName: String(payload.printerName), status: String(payload.status || "排队"), progress: Number(payload.progress || 0), quantity:Number(payload.quantity||1), priority:Number(payload.priority||3) }).returning();
       return Response.json({ row }, { status: 201 });
     }
+    if(payload.entity==="material"){const [row]=await db.update(materialBatches).set({costPerKg:Number(payload.costPerKg||0)}).where(eq(materialBatches.id,payload.id)).returning();return Response.json({row});}
     return Response.json({ error: "不支持的数据类型" }, { status: 400 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "保存失败";

@@ -19,6 +19,7 @@ export const materialBatches = sqliteTable("material_batches", {
   initialGrams: real("initial_grams").notNull(),
   remainingGrams: real("remaining_grams").notNull(),
   lowStockGrams: real("low_stock_grams").notNull().default(200),
+  costPerKg: real("cost_per_kg").notNull().default(0),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
@@ -112,6 +113,7 @@ export const printers = sqliteTable("printers", {
   buildVolume: text("build_volume").notNull().default(""),
   status: text("status").notNull().default("空闲"),
   totalHours: real("total_hours").notNull().default(0),
+  hourlyRate: real("hourly_rate").notNull().default(0),
   maintenanceDueAt: text("maintenance_due_at"),
   notes: text("notes").notNull().default(""),
   connectorType: text("connector_type").notNull().default("manual"),
