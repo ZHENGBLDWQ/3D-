@@ -14,6 +14,7 @@ type Section =
   | "生产明细"
   | "文件资产"
   | "设备管理"
+  | "外部任务"
   | "系统中心";
 type Entity = "item" | "material" | "order" | "job";
 type Item = {
@@ -93,6 +94,7 @@ const nav: { label: Section; mark: string }[] = [
   { label: "生产明细", mark: "≋" },
   { label: "文件资产", mark: "▱" },
   { label: "设备管理", mark: "▣" },
+  { label: "外部任务", mark: "↗" },
 ];
 const emptyData: WorkspaceData = {
   items: [],
@@ -147,6 +149,7 @@ export default function Home() {
         "生产明细",
         "文件资产",
         "设备管理",
+        "外部任务",
         "耗材卷同步",
         "经营分析",
         "良率分析",
@@ -360,6 +363,8 @@ export default function Home() {
             <FileAssets data={data} toast={toast} />
           ) : section === "设备管理" ? (
             <PrinterManager toast={toast} />
+          ) : section === "外部任务" ? (
+            <ExternalPrintJobs data={data} toast={toast} onChanged={loadData} />
           ) : section === "耗材卷同步" ? (
             <SpoolmanInventory toast={toast} />
           ) : (
@@ -2017,6 +2022,190 @@ const bambuPresets: Record<string, { volume: string; watts: number }> = {
   "Bambu Lab H2D": { volume: "325 × 320 × 325 mm", watts: 2200 },
   "Bambu Lab H2S": { volume: "340 × 320 × 340 mm", watts: 2000 },
 };
+
+type ExternalPrintJob = {
+  id: number;
+  filename: string;
+  printerName: string;
+  material: string;
+  amsUnit: number | null;
+  trayIndex: number | null;
+  quantity: number;
+  estimatedGrams: number;
+  consumedGrams: number;
+  status: string;
+  result: string;
+  itemName: string | null;
+  orderNo: string | null;
+  batchMaterial: string | null;
+  batchColor: string | null;
+  startedAt: string;
+};
+
+function ExternalPrintJobs({
+  data,
+  toast,
+  onChanged,
+}: {
+  data: WorkspaceData;
+  toast: (m: string) => void;
+  onChanged: () => Promise<void>;
+}) {
+  const [jobs, setJobs] = useState<ExternalPrintJob[]>([]);
+  const [busy, setBusy] = useState<number | null>(null);
+  async function load() {
+    const response = await fetch("/api/external-jobs", { cache: "no-store" });
+    const result = await response.json();
+    if (response.ok) setJobs(result.jobs || []);
+    else toast(result.error || "外部任务读取失败");
+  }
+  useEffect(() => {
+    void load();
+    const timer = window.setInterval(() => void load(), 10000);
+    return () => window.clearInterval(timer);
+  }, []);
+  async function claim(event: FormEvent<HTMLFormElement>, id: number) {
+    event.preventDefault();
+    setBusy(id);
+    const values = Object.fromEntries(new FormData(event.currentTarget));
+    const response = await fetch("/api/external-jobs", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, ...values }),
+    });
+    const result = await response.json();
+    setBusy(null);
+    if (!response.ok) return toast(result.error || "任务认领失败");
+    toast("外部打印任务已关联，耗材将自动结算");
+    await Promise.all([load(), onChanged()]);
+  }
+  return (
+    <section className="external-jobs">
+      <div className="panel management-hero">
+        <small>BAMBU STUDIO INBOX</small>
+        <h2>外部打印任务</h2>
+        <p>
+          自动接收由 Bambu Studio
+          发起的打印；首次选择产品、订单和耗材卷，完成后自动扣料并计入实际成本。
+        </p>
+      </div>
+      <div className="external-job-grid">
+        {jobs.map((job) => (
+          <article className="panel external-job-card" key={job.id}>
+            <header>
+              <div>
+                <small>
+                  {job.printerName} ·{" "}
+                  {job.amsUnit == null
+                    ? "外置料架"
+                    : `AMS ${job.amsUnit + 1}-${(job.trayIndex || 0) + 1}`}
+                </small>
+                <h3>{job.filename || "未命名打印文件"}</h3>
+              </div>
+              <b className={job.status === "待认领" ? "waiting" : "printing"}>
+                {job.status}
+              </b>
+            </header>
+            <dl>
+              <div>
+                <dt>识别材料</dt>
+                <dd>{job.material || "待识别"}</dd>
+              </div>
+              <div>
+                <dt>任务结果</dt>
+                <dd>{job.result || "打印进行中"}</dd>
+              </div>
+              <div>
+                <dt>预计 / 消耗</dt>
+                <dd>
+                  {job.estimatedGrams || 0}g / {job.consumedGrams || 0}g
+                </dd>
+              </div>
+              <div>
+                <dt>开始时间</dt>
+                <dd>{new Date(job.startedAt).toLocaleString("zh-CN")}</dd>
+              </div>
+            </dl>
+            {job.itemName ? (
+              <div className="claimed-summary">
+                <strong>{job.itemName}</strong>
+                <span>
+                  {job.orderNo || "未关联订单"} · {job.batchMaterial}{" "}
+                  {job.batchColor}
+                </span>
+              </div>
+            ) : (
+              <form onSubmit={(event) => claim(event, job.id)}>
+                <label>
+                  <span>对应产品</span>
+                  <select name="itemId" required>
+                    <option value="">请选择</option>
+                    {data.items.map((item) => (
+                      <option value={item.id} key={item.id}>
+                        {item.sku} · {item.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>客户订单</span>
+                  <select name="orderId">
+                    <option value="">不关联</option>
+                    {data.orders.map((order) => (
+                      <option value={order.id} key={order.id}>
+                        {order.orderNo} · {order.customer}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>实际耗材卷</span>
+                  <select name="batchId" required>
+                    <option value="">请选择</option>
+                    {data.materials.map((material) => (
+                      <option value={material.id} key={material.id}>
+                        {material.material} {material.color} · 可用{" "}
+                        {material.availableGrams.toFixed(1)}g
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>本板数量</span>
+                  <input
+                    name="quantity"
+                    type="number"
+                    min="1"
+                    defaultValue="1"
+                  />
+                </label>
+                <label>
+                  <span>切片总克重</span>
+                  <input
+                    name="estimatedGrams"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    placeholder="从 Bambu Studio 填入"
+                  />
+                </label>
+                <button className="primary" disabled={busy === job.id}>
+                  {busy === job.id ? "保存中…" : "认领并纳入成本"}
+                </button>
+              </form>
+            )}
+          </article>
+        ))}
+        {jobs.length === 0 && (
+          <div className="panel empty-state">
+            Agent 连接后，在 Bambu Studio 发起打印，任务会自动出现在这里。
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function PrinterManager({ toast }: { toast: (m: string) => void }) {
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [saving, setSaving] = useState(false);

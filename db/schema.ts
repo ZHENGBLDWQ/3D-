@@ -1,10 +1,56 @@
 import { sql } from "drizzle-orm";
 import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-export const organizations = sqliteTable("organizations", { id: integer("id").primaryKey({ autoIncrement: true }), name: text("name").notNull(), slug: text("slug").notNull().unique(), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`) });
-export const organizationMembers = sqliteTable("organization_members", { id: integer("id").primaryKey({ autoIncrement: true }), organizationId: integer("organization_id").notNull().references(() => organizations.id), email: text("email").notNull().unique(), displayName: text("display_name").notNull().default(""), role: text("role").notNull().default("operator"), status: text("status").notNull().default("invited"), printerScope: text("printer_scope").notNull().default("[]"), invitedBy: text("invited_by").notNull().default(""), passwordHash: text("password_hash"), lastLoginAt: text("last_login_at"), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`) });
-export const auditLogs = sqliteTable("audit_logs", { id: integer("id").primaryKey({ autoIncrement: true }), organizationId: integer("organization_id").notNull().references(() => organizations.id), actorEmail: text("actor_email").notNull(), action: text("action").notNull(), resource: text("resource").notNull().default("system"), resourceId: text("resource_id").notNull().default(""), detail: text("detail").notNull().default("{}"), ipAddress: text("ip_address").notNull().default(""), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`) });
-export const costSettings = sqliteTable("cost_settings", { id: integer("id").primaryKey(), electricityRate: real("electricity_rate").notNull().default(0.8), laborRate: real("labor_rate").notNull().default(0), laborMinutesPerJob: real("labor_minutes_per_job").notNull().default(0), overheadPercent: real("overhead_percent").notNull().default(0), updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`) });
+export const organizations = sqliteTable("organizations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+export const organizationMembers = sqliteTable("organization_members", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: integer("organization_id")
+    .notNull()
+    .references(() => organizations.id),
+  email: text("email").notNull().unique(),
+  displayName: text("display_name").notNull().default(""),
+  role: text("role").notNull().default("operator"),
+  status: text("status").notNull().default("invited"),
+  printerScope: text("printer_scope").notNull().default("[]"),
+  invitedBy: text("invited_by").notNull().default(""),
+  passwordHash: text("password_hash"),
+  lastLoginAt: text("last_login_at"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+export const auditLogs = sqliteTable("audit_logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: integer("organization_id")
+    .notNull()
+    .references(() => organizations.id),
+  actorEmail: text("actor_email").notNull(),
+  action: text("action").notNull(),
+  resource: text("resource").notNull().default("system"),
+  resourceId: text("resource_id").notNull().default(""),
+  detail: text("detail").notNull().default("{}"),
+  ipAddress: text("ip_address").notNull().default(""),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+export const costSettings = sqliteTable("cost_settings", {
+  id: integer("id").primaryKey(),
+  electricityRate: real("electricity_rate").notNull().default(0.8),
+  laborRate: real("labor_rate").notNull().default(0),
+  laborMinutesPerJob: real("labor_minutes_per_job").notNull().default(0),
+  overheadPercent: real("overhead_percent").notNull().default(0),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
 
 export const printItems = sqliteTable("print_items", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -13,7 +59,9 @@ export const printItems = sqliteTable("print_items", {
   category: text("category").notNull().default("未分类"),
   estimatedGrams: real("estimated_grams").notNull().default(0),
   estimatedMinutes: integer("estimated_minutes").notNull().default(0),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const materialBatches = sqliteTable("material_batches", {
@@ -25,7 +73,9 @@ export const materialBatches = sqliteTable("material_batches", {
   remainingGrams: real("remaining_grams").notNull(),
   lowStockGrams: real("low_stock_grams").notNull().default(200),
   costPerKg: real("cost_per_kg").notNull().default(0),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const orders = sqliteTable("orders", {
@@ -34,7 +84,9 @@ export const orders = sqliteTable("orders", {
   customer: text("customer").notNull(),
   status: text("status").notNull().default("待确认"),
   dueAt: text("due_at"),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const printJobs = sqliteTable("print_jobs", {
@@ -47,48 +99,72 @@ export const printJobs = sqliteTable("print_jobs", {
   progress: integer("progress").notNull().default(0),
   quantity: integer("quantity").notNull().default(1),
   priority: integer("priority").notNull().default(3),
-  materialDeducted: integer("material_deducted", { mode: "boolean" }).notNull().default(false),
+  materialDeducted: integer("material_deducted", { mode: "boolean" })
+    .notNull()
+    .default(false),
   startedAt: text("started_at"),
   completedAt: text("completed_at"),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const inventoryTransactions = sqliteTable("inventory_transactions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  batchId: integer("batch_id").notNull().references(() => materialBatches.id),
+  batchId: integer("batch_id")
+    .notNull()
+    .references(() => materialBatches.id),
   jobId: integer("job_id").references(() => printJobs.id),
   type: text("type").notNull(),
   grams: real("grams").notNull(),
   note: text("note").notNull().default(""),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const orderItems = sqliteTable("order_items", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  orderId: integer("order_id").notNull().references(() => orders.id),
-  itemId: integer("item_id").notNull().references(() => printItems.id),
+  orderId: integer("order_id")
+    .notNull()
+    .references(() => orders.id),
+  itemId: integer("item_id")
+    .notNull()
+    .references(() => printItems.id),
   quantity: integer("quantity").notNull().default(1),
   unitPrice: real("unit_price").notNull().default(0),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const itemMaterials = sqliteTable("item_materials", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  itemId: integer("item_id").notNull().references(() => printItems.id),
-  batchId: integer("batch_id").notNull().references(() => materialBatches.id),
+  itemId: integer("item_id")
+    .notNull()
+    .references(() => printItems.id),
+  batchId: integer("batch_id")
+    .notNull()
+    .references(() => materialBatches.id),
   gramsPerItem: real("grams_per_item").notNull(),
   wastePercent: real("waste_percent").notNull().default(5),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const printJobEvents = sqliteTable("print_job_events", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  jobId: integer("job_id").notNull().references(() => printJobs.id),
+  jobId: integer("job_id")
+    .notNull()
+    .references(() => printJobs.id),
   action: text("action").notNull(),
   fromStatus: text("from_status").notNull(),
   toStatus: text("to_status").notNull(),
   note: text("note").notNull().default(""),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const printFiles = sqliteTable("print_files", {
@@ -105,7 +181,9 @@ export const printFiles = sqliteTable("print_files", {
   infillPercent: real("infill_percent"),
   estimatedMinutes: integer("estimated_minutes"),
   notes: text("notes").notNull().default(""),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const printers = sqliteTable("printers", {
@@ -131,12 +209,16 @@ export const printers = sqliteTable("printers", {
   currentFile: text("current_file"),
   remoteProgress: real("remote_progress"),
   activeSpoolExternalId: integer("active_spool_external_id"),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const bambuAmsSlots = sqliteTable("bambu_ams_slots", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  printerId: integer("printer_id").notNull().references(() => printers.id),
+  printerId: integer("printer_id")
+    .notNull()
+    .references(() => printers.id),
   amsUnit: integer("ams_unit").notNull().default(0),
   trayIndex: integer("tray_index").notNull(),
   material: text("material").notNull().default(""),
@@ -150,7 +232,9 @@ export const bambuAmsSlots = sqliteTable("bambu_ams_slots", {
 
 export const bambuMaterialUsage = sqliteTable("bambu_material_usage", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  printerId: integer("printer_id").notNull().references(() => printers.id),
+  printerId: integer("printer_id")
+    .notNull()
+    .references(() => printers.id),
   filename: text("filename").notNull().default(""),
   material: text("material").notNull().default(""),
   amsUnit: integer("ams_unit"),
@@ -159,17 +243,53 @@ export const bambuMaterialUsage = sqliteTable("bambu_material_usage", {
   consumedGrams: real("consumed_grams").notNull().default(0),
   result: text("result").notNull().default("完成"),
   startedAt: text("started_at"),
-  completedAt: text("completed_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const externalPrintJobs = sqliteTable("external_print_jobs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  printerId: integer("printer_id")
+    .notNull()
+    .references(() => printers.id),
+  filename: text("filename").notNull().default(""),
+  itemId: integer("item_id").references(() => printItems.id),
+  orderId: integer("order_id").references(() => orders.id),
+  batchId: integer("batch_id").references(() => materialBatches.id),
+  quantity: integer("quantity").notNull().default(1),
+  material: text("material").notNull().default(""),
+  amsUnit: integer("ams_unit"),
+  trayIndex: integer("tray_index"),
+  estimatedGrams: real("estimated_grams").notNull().default(0),
+  consumedGrams: real("consumed_grams").notNull().default(0),
+  status: text("status").notNull().default("待认领"),
+  result: text("result").notNull().default(""),
+  inventoryDeducted: integer("inventory_deducted", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  startedAt: text("started_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
+  claimedAt: text("claimed_at"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const printerCommands = sqliteTable("printer_commands", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  printerId: integer("printer_id").notNull().references(() => printers.id),
+  printerId: integer("printer_id")
+    .notNull()
+    .references(() => printers.id),
   command: text("command").notNull(),
   payload: text("payload").notNull().default("{}"),
   status: text("status").notNull().default("待执行"),
   result: text("result").notNull().default(""),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
   completedAt: text("completed_at"),
 });
 
@@ -187,6 +307,8 @@ export const spoolmanSpools = sqliteTable("spoolman_spools", {
   lotNr: text("lot_nr").notNull().default(""),
   archived: integer("archived", { mode: "boolean" }).notNull().default(false),
   lastUsed: text("last_used"),
-  syncedByPrinterId: integer("synced_by_printer_id").references(() => printers.id),
+  syncedByPrinterId: integer("synced_by_printer_id").references(
+    () => printers.id,
+  ),
   lastSeenAt: text("last_seen_at").notNull(),
 });

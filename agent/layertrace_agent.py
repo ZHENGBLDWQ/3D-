@@ -187,13 +187,15 @@ def bambu_usage_event(payload):
     active = next((slot for slot in payload.get("ams", []) if slot.get("active")), {})
     if payload.get("state") == "printing" and not job:
         pending = state.get("bambuPending", {})
-        job = {"filename":payload.get("filename") or pending.get("filename", ""),"estimatedGrams":pending.get("estimatedGrams", 0),"startedAt":time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),"material":active.get("material", ""),"unit":active.get("unit"),"tray":active.get("tray")}
+        job = {"filename":payload.get("filename") or pending.get("filename", ""),"estimatedGrams":pending.get("estimatedGrams", 0),"startedAt":time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),"material":active.get("material", ""),"unit":active.get("unit"),"tray":active.get("tray"),"external":not bool(pending)}
         state["bambuJob"] = job
         save_usage_state(state)
+        if job["external"]:
+            return {**job,"phase":"started","consumedGrams":0,"result":""}
     elif job and payload.get("state") in ("online", "error"):
         progress = max(0.0, min(100.0, float(payload.get("progress") or 0)))
         consumed = float(job.get("estimatedGrams", 0)) * (1 if payload.get("state") == "online" else progress / 100)
-        event = {**job,"consumedGrams":round(consumed,2),"result":"完成" if payload.get("state") == "online" else "失败","completedAt":time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        event = {**job,"phase":"finished","progressPercent":progress,"consumedGrams":round(consumed,2),"result":"完成" if payload.get("state") == "online" else "失败","completedAt":time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
         state.pop("bambuJob", None)
         state.pop("bambuPending", None)
         save_usage_state(state)

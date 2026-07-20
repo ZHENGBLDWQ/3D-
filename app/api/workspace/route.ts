@@ -193,17 +193,17 @@ export async function GET() {
         .all<Record<string, number>>(),
       d1
         .prepare(
-          `SELECT im.batch_id batchId,SUM(im.grams_per_item*j.quantity*(1+im.waste_percent/100.0)) reservedGrams FROM print_jobs j JOIN item_materials im ON im.item_id=j.item_id WHERE j.status IN ('排队','打印中','已暂停') AND j.material_deducted=0 GROUP BY im.batch_id`,
+          `SELECT batchId,SUM(reservedGrams) reservedGrams FROM (SELECT im.batch_id batchId,SUM(im.grams_per_item*j.quantity*(1+im.waste_percent/100.0)) reservedGrams FROM print_jobs j JOIN item_materials im ON im.item_id=j.item_id WHERE j.status IN ('排队','打印中','已暂停') AND j.material_deducted=0 GROUP BY im.batch_id UNION ALL SELECT e.batch_id batchId,SUM(e.estimated_grams) reservedGrams FROM external_print_jobs e WHERE e.batch_id IS NOT NULL AND e.completed_at IS NULL AND e.inventory_deducted=0 GROUP BY e.batch_id) GROUP BY batchId`,
         )
         .all<Record<string, number>>(),
       d1
         .prepare(
-          `SELECT j.item_id itemId,SUM(j.quantity) units,COUNT(*) jobs,SUM(MAX(0,(julianday(j.completed_at)-julianday(j.started_at))*24)*COALESCE(p.hourly_rate,0)) machineCost,SUM(MAX(0,(julianday(j.completed_at)-julianday(j.started_at))*24)*COALESCE(p.power_watts,1000)/1000.0) energyKwh FROM print_jobs j LEFT JOIN printers p ON p.name=j.printer_name WHERE j.status='已完成' AND j.item_id IS NOT NULL AND j.completed_at IS NOT NULL GROUP BY j.item_id`,
+          `SELECT itemId,SUM(units) units,SUM(jobs) jobs,SUM(machineCost) machineCost,SUM(energyKwh) energyKwh FROM (SELECT j.item_id itemId,SUM(j.quantity) units,COUNT(*) jobs,SUM(MAX(0,(julianday(j.completed_at)-julianday(j.started_at))*24)*COALESCE(p.hourly_rate,0)) machineCost,SUM(MAX(0,(julianday(j.completed_at)-julianday(j.started_at))*24)*COALESCE(p.power_watts,1000)/1000.0) energyKwh FROM print_jobs j LEFT JOIN printers p ON p.name=j.printer_name WHERE j.status='已完成' AND j.item_id IS NOT NULL AND j.completed_at IS NOT NULL GROUP BY j.item_id UNION ALL SELECT e.item_id itemId,SUM(e.quantity) units,COUNT(*) jobs,SUM(MAX(0,(julianday(e.completed_at)-julianday(e.started_at))*24)*COALESCE(p.hourly_rate,0)) machineCost,SUM(MAX(0,(julianday(e.completed_at)-julianday(e.started_at))*24)*COALESCE(p.power_watts,1000)/1000.0) energyKwh FROM external_print_jobs e JOIN printers p ON p.id=e.printer_id WHERE e.item_id IS NOT NULL AND e.completed_at IS NOT NULL AND e.result='完成' GROUP BY e.item_id) GROUP BY itemId`,
         )
         .all<Record<string, number>>(),
       d1
         .prepare(
-          `SELECT j.item_id itemId,SUM(ABS(t.grams)*mb.cost_per_kg/1000.0) materialCost FROM inventory_transactions t JOIN print_jobs j ON j.id=t.job_id JOIN material_batches mb ON mb.id=t.batch_id WHERE t.type='打印消耗' AND j.item_id IS NOT NULL GROUP BY j.item_id`,
+          `SELECT itemId,SUM(materialCost) materialCost FROM (SELECT j.item_id itemId,SUM(ABS(t.grams)*mb.cost_per_kg/1000.0) materialCost FROM inventory_transactions t JOIN print_jobs j ON j.id=t.job_id JOIN material_batches mb ON mb.id=t.batch_id WHERE t.type='打印消耗' AND j.item_id IS NOT NULL GROUP BY j.item_id UNION ALL SELECT e.item_id itemId,SUM(e.consumed_grams*mb.cost_per_kg/1000.0) materialCost FROM external_print_jobs e JOIN material_batches mb ON mb.id=e.batch_id WHERE e.item_id IS NOT NULL AND e.inventory_deducted=1 GROUP BY e.item_id) GROUP BY itemId`,
         )
         .all<Record<string, number>>(),
     ]);
