@@ -2456,6 +2456,42 @@ td button {
 .printer-allocation-list span:last-child { align-items:flex-end; }
 .printer-allocation-list button { border:0; background:transparent; color:#d15a50; padding:2px 0; cursor:pointer; font-size:11px; }
 .printer-transfer-button { width:100%; margin-top:14px; min-height:40px; border:1px dashed #aebdb6; border-radius:10px; background:#f8faf9; color:#355147; cursor:pointer; }
+.bulk-import-modal { width:min(1180px,calc(100vw - 34px)); }
+.bulk-import-body { display:flex; flex-direction:column; gap:16px; }
+.bulk-import-steps { display:grid; grid-template-columns:auto 1fr auto 1fr auto; gap:10px; align-items:center; padding:2px 4px 10px; }
+.bulk-import-steps span { display:flex; align-items:center; gap:8px; color:#89958f; font-size:12px; font-weight:700; }
+.bulk-import-steps b { width:26px; height:26px; display:grid; place-items:center; border-radius:50%; background:#e7ece9; color:#6f7d76; }
+.bulk-import-steps span.active,.bulk-import-steps span.done { color:#244338; }
+.bulk-import-steps span.active b { background:#ff5d2e; color:#fff; }
+.bulk-import-steps span.done b { background:#2aa777; color:#fff; }
+.bulk-import-steps i { height:1px; background:#dce4e0; }
+.bulk-import-actions { display:grid; grid-template-columns:auto 1fr 220px; gap:12px; align-items:stretch; }
+.bulk-import-actions>button { border:1px solid #d4ded9; border-radius:12px; background:#fff; color:#30493f; padding:0 17px; cursor:pointer; font-weight:700; }
+.bulk-file-picker { min-height:70px; border:1px dashed #9eb2a8; border-radius:12px; background:#f7faf8; display:flex; flex-direction:column; justify-content:center; padding:12px 16px; cursor:pointer; }
+.bulk-file-picker:hover { border-color:#ff5d2e; background:#fff8f5; }
+.bulk-file-picker input { position:absolute; opacity:0; pointer-events:none; }
+.bulk-file-picker strong { color:#264237; }
+.bulk-file-picker small { color:#839189; margin-top:4px; }
+.bulk-mode { display:flex; flex-direction:column; justify-content:center; gap:6px; padding:9px 12px; border:1px solid #dde5e1; border-radius:12px; }
+.bulk-mode span { color:#7e8c85; font-size:11px; }
+.bulk-mode select { border:0; outline:0; color:#263b32; background:transparent; font-weight:700; }
+.bulk-import-summary { display:flex; gap:10px; }
+.bulk-import-summary span { min-width:120px; padding:10px 13px; border-radius:10px; background:#f2f5f3; color:#65746d; }
+.bulk-import-summary strong { color:#203a30; font-size:18px; margin-right:5px; }
+.bulk-import-summary .ok { background:#edf9f4; color:#27815f; }
+.bulk-import-summary .ok strong { color:#21825e; }
+.bulk-import-summary .bad { background:#fff0ee; color:#c64d46; }
+.bulk-import-summary .bad strong { color:#c64d46; }
+.bulk-preview { overflow:auto; max-height:390px; border:1px solid #dfe6e2; border-radius:12px; }
+.bulk-preview table { width:100%; min-width:1050px; border-collapse:collapse; }
+.bulk-preview th { position:sticky; top:0; z-index:1; background:#f3f6f4; padding:10px; text-align:left; font-size:11px; color:#65746d; }
+.bulk-preview td { padding:10px; border-top:1px solid #edf1ef; font-size:12px; }
+.bulk-preview tr.invalid { background:#fff5f3; }
+.bulk-preview td:last-child span { color:#c64b45; }
+.bulk-preview td:last-child b { color:#21825e; }
+.bulk-preview p { margin:0; padding:10px; color:#7f8c86; text-align:center; background:#f8faf9; }
+.stock-ledger-toolbar { position:sticky; top:10px; z-index:3; }
+.stock-ledger-toolbar>div:last-child button { white-space:nowrap; }
 
 @media(max-width:1250px){
   .stock-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -2471,4 +2507,10 @@ td button {
   .printer-material-card{padding:15px}
   .printer-live-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
   .ams-slot-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .bulk-import-actions{grid-template-columns:1fr}
+  .bulk-import-actions>button{min-height:44px}
+  .bulk-import-steps{grid-template-columns:1fr;gap:6px}
+  .bulk-import-steps i{display:none}
+  .bulk-import-summary{display:grid;grid-template-columns:1fr 1fr}
+  .stock-ledger-toolbar{position:static}
 }

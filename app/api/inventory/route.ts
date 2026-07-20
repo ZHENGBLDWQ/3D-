@@ -9,7 +9,8 @@ type InventoryAction =
   | "transferToPrinter"
   | "returnFromPrinter"
   | "createTransit"
-  | "receiveTransit";
+  | "receiveTransit"
+  | "bulkImport";
 
 async function ensureInventorySchema() {
   const d1 = getD1();
@@ -195,6 +196,66 @@ export async function POST(request: Request) {
           .bind(Number(tx.meta.last_row_id),receiptNo,text(body.operator),text(body.warehouse)||"主仓","期初建账"),
       ]);
       return Response.json({ ok: true, batchId }, { status: 201 });
+    }
+    if (body.action === "bulkImport") {
+      const rows = Array.isArray(body.rows) ? body.rows as Array<Record<string, unknown>> : [];
+      const importMode = text(body.importMode) === "add" ? "add" : "skip";
+      if (!rows.length || rows.length > 500) return Response.json({ error: "一次请导入 1 至 500 行商品" }, { status: 400 });
+      const seen = new Set<string>();
+      const normalized = rows.map((row, index) => {
+        const sku = text(row.sku), material = text(row.material), color = text(row.color);
+        const spoolWeight = positive(row.spoolWeightGrams, 1000), spoolCount = positive(row.spoolCount, 0);
+        const errors: string[] = [];
+        if (!sku) errors.push("商品编码为空");
+        if (!material) errors.push("商品名称/材质为空");
+        if (!color) errors.push("颜色为空");
+        if (!spoolCount) errors.push("卷数必须大于 0");
+        if (seen.has(sku.toLowerCase())) errors.push("文件内商品编码重复");
+        seen.add(sku.toLowerCase());
+        return { index: index + 2, row, sku, material, color, spoolWeight, spoolCount, totalGrams: Number((spoolWeight * spoolCount).toFixed(2)), errors };
+      });
+      const invalid = normalized.filter(item => item.errors.length);
+      if (invalid.length) return Response.json({ error: `有 ${invalid.length} 行数据不合格`, rowErrors: invalid.map(item => ({ row: item.index, errors: item.errors })) }, { status: 400 });
+      let imported = 0, updated = 0, skipped = 0;
+      const skippedSkus: string[] = [];
+      for (const item of normalized) {
+        const existing = await d1.prepare(`SELECT b.id,b.remaining_grams remainingGrams,b.cost_per_kg costPerKg FROM material_batches b
+          JOIN material_inventory_meta m ON m.batch_id=b.id WHERE lower(m.sku)=lower(?)`).bind(item.sku).first<{id:number;remainingGrams:number;costPerKg:number}>();
+        if (existing && importMode === "skip") { skipped++; skippedSkus.push(item.sku); continue; }
+        const costPerKg = Math.max(0, Number(item.row.costPerKg || 0));
+        const lowStock = Math.max(0, Number(item.row.lowStockGrams || item.spoolWeight));
+        const warehouse = text(item.row.warehouse) || "主仓";
+        const documentNo = text(item.row.documentNo) || `BULK-${Date.now()}-${item.index}`;
+        if (existing) {
+          const tx = await d1.prepare("INSERT INTO inventory_transactions(batch_id,type,grams,note) VALUES(?,'批量入库',?,?)")
+            .bind(existing.id,item.totalGrams,`批量导入追加 ${item.spoolCount} 卷`).run();
+          await d1.batch([
+            d1.prepare(`UPDATE material_batches SET material=?,color=?,brand=?,
+              cost_per_kg=CASE WHEN remaining_grams+?>0 THEN (remaining_grams*cost_per_kg+?*?)/(remaining_grams+?) ELSE ? END,
+              initial_grams=initial_grams+?,remaining_grams=remaining_grams+?,low_stock_grams=? WHERE id=?`)
+              .bind(item.material,item.color,text(item.row.brand),item.totalGrams,item.totalGrams,costPerKg,item.totalGrams,costPerKg,item.totalGrams,item.totalGrams,lowStock,existing.id),
+            d1.prepare(`UPDATE material_inventory_meta SET specification=?,spool_weight_grams=?,spool_count=spool_count+?,supplier=?,warehouse=?,location=?,lot_no=?,notes=?,updated_at=CURRENT_TIMESTAMP WHERE batch_id=?`)
+              .bind(text(item.row.specification),item.spoolWeight,item.spoolCount,text(item.row.supplier),warehouse,text(item.row.location),text(item.row.lotNo),text(item.row.notes),existing.id),
+            d1.prepare("INSERT INTO inventory_transaction_meta(transaction_id,document_no,operator,warehouse,source) VALUES(?,?,?,?,?)")
+              .bind(Number(tx.meta.last_row_id),documentNo,text(item.row.operator),warehouse,"批量导入"),
+          ]);
+          updated++;
+        } else {
+          const result = await d1.prepare(`INSERT INTO material_batches(material,color,brand,initial_grams,remaining_grams,low_stock_grams,cost_per_kg) VALUES(?,?,?,?,?,?,?)`)
+            .bind(item.material,item.color,text(item.row.brand),item.totalGrams,item.totalGrams,lowStock,costPerKg).run();
+          const batchId = Number(result.meta.last_row_id);
+          const tx = await d1.prepare("INSERT INTO inventory_transactions(batch_id,type,grams,note) VALUES(?,'批量期初入库',?,?)")
+            .bind(batchId,item.totalGrams,text(item.row.notes)).run();
+          await d1.batch([
+            d1.prepare(`INSERT INTO material_inventory_meta(batch_id,sku,specification,spool_weight_grams,spool_count,supplier,warehouse,location,lot_no,received_at,status,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`)
+              .bind(batchId,item.sku,text(item.row.specification),item.spoolWeight,item.spoolCount,text(item.row.supplier),warehouse,text(item.row.location),text(item.row.lotNo),text(item.row.receivedAt)||null,"在库",text(item.row.notes)),
+            d1.prepare("INSERT INTO inventory_transaction_meta(transaction_id,document_no,operator,warehouse,source) VALUES(?,?,?,?,?)")
+              .bind(Number(tx.meta.last_row_id),documentNo,text(item.row.operator),warehouse,"批量导入"),
+          ]);
+          imported++;
+        }
+      }
+      return Response.json({ ok: true, imported, updated, skipped, skippedSkus }, { status: 201 });
     }
     if (body.action === "movement") {
       const batchId = Number(body.batchId), movementType = text(body.type), grams = positive(body.grams);
