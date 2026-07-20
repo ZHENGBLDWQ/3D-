@@ -118,6 +118,7 @@ export async function PATCH(request: Request) {
       };
       const next=transitions[job.status]?.[payload.action];
       if(!next) return Response.json({error:`任务处于“${job.status}”，不能执行该操作`},{status:400});
+      if(payload.action==="fail"&&!String(payload.note||"").trim())return Response.json({error:"请填写失败原因"},{status:400});
       const statements:D1PreparedStatement[]=[];
       let progress=job.progress;
       let startedSql:string|null=null,completedSql:string|null=null;

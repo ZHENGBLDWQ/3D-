@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
-type Section = "概览" | "经营分析" | "打印物品" | "耗材库存" | "耗材卷同步" | "订单" | "打印队列" | "生产明细" | "文件资产" | "设备管理";
+type Section = "概览" | "经营分析" | "良率分析" | "打印物品" | "耗材库存" | "耗材卷同步" | "订单" | "打印队列" | "生产明细" | "文件资产" | "设备管理";
 type Entity = "item" | "material" | "order" | "job";
 type Item = { id:number; sku:string; name:string; category:string; estimatedGrams:number; estimatedMinutes:number };
 type Material = { id:number; material:string; color:string; brand:string; initialGrams:number; remainingGrams:number; lowStockGrams:number; costPerKg:number };
@@ -11,7 +11,7 @@ type Job = { id:number; jobNo:string; itemId:number|null; itemName:string|null; 
 type WorkspaceData = { items:Item[]; materials:Material[]; orders:Order[]; jobs:Job[] };
 
 const nav: { label:Section; mark:string }[] = [
-  { label:"概览", mark:"⌂" }, { label:"经营分析", mark:"▥" }, { label:"打印物品", mark:"◇" }, { label:"耗材库存", mark:"◉" }, { label:"耗材卷同步", mark:"◍" }, { label:"订单", mark:"▤" }, { label:"打印队列", mark:"▷" }, { label:"生产明细", mark:"≋" }, { label:"文件资产", mark:"▱" }, { label:"设备管理", mark:"▣" },
+  { label:"概览", mark:"⌂" }, { label:"经营分析", mark:"▥" }, { label:"良率分析", mark:"◎" }, { label:"打印物品", mark:"◇" }, { label:"耗材库存", mark:"◉" }, { label:"耗材卷同步", mark:"◍" }, { label:"订单", mark:"▤" }, { label:"打印队列", mark:"▷" }, { label:"生产明细", mark:"≋" }, { label:"文件资产", mark:"▱" }, { label:"设备管理", mark:"▣" },
 ];
 const emptyData:WorkspaceData = { items:[], materials:[], orders:[], jobs:[] };
 const entityBySection:Record<"打印物品"|"耗材库存"|"订单"|"打印队列",Entity> = { "打印物品":"item", "耗材库存":"material", "订单":"order", "打印队列":"job" };
@@ -45,14 +45,15 @@ export default function Home() {
   }, []);
 
   function toast(message:string) { setNotice(message); window.setTimeout(() => setNotice(""),2600); }
-  function openCreate() { if(["生产明细","文件资产","设备管理","耗材卷同步","经营分析"].includes(section)) return; setModal(section === "概览" ? "job" : entityBySection[section]); }
+  function openCreate() { if(["生产明细","文件资产","设备管理","耗材卷同步","经营分析","良率分析"].includes(section)) return; setModal(section === "概览" ? "job" : entityBySection[section]); }
   async function remove(entity:Entity,id:number) {
     if (!window.confirm("确定删除这条记录吗？此操作不可撤销。")) return;
     const response = await fetch(`/api/workspace?entity=${entity}&id=${id}`, { method:"DELETE" });
     if (response.ok) { toast("记录已删除"); await loadData(); } else toast("删除失败：记录可能正在被其他数据使用");
   }
   async function runJobAction(job:Job,action:string) {
-    const response = await fetch("/api/workspace", { method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ entity:"job", id:job.id, action }) });
+    let note="";if(action==="fail"){const reason=window.prompt("请选择或填写失败原因：\n翘边 / 脱层 / 堵头 / 断料 / 尺寸偏差 / 表面缺陷 / 设备故障 / 其他","翘边");if(!reason)return;note=reason.trim();}
+    const response = await fetch("/api/workspace", { method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ entity:"job", id:job.id, action, note }) });
     const result=await response.json();
     if (response.ok) { toast(`任务已更新为${result.status}`); await loadData(); } else toast(result.error||"任务操作失败");
   }
@@ -81,10 +82,10 @@ export default function Home() {
       <div className="sidebar-bottom"><div className="system-state"><i/> {loading?"正在同步数据":"数据已同步"}</div><button onClick={() => toast("设置中心将在设备接入阶段开放")}>⚙ 系统设置</button><div className="profile"><span>郑</span><div><strong>管理员</strong><small>私有工作区</small></div><em>•••</em></div></div>
     </aside>
     <section className="content">
-      <header className="topbar"><div><p>生产控制台</p><h1>{section}</h1></div><div className="top-actions"><label className="search"><span>⌕</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索当前数据"/></label><button className="icon-btn" aria-label="通知">♢<i/></button>{!(["生产明细","文件资产","设备管理","耗材卷同步","经营分析"] as Section[]).includes(section)&&<button className="primary" onClick={openCreate}>＋ 新建{section==="概览"?"任务":section}</button>}</div></header>
+      <header className="topbar"><div><p>生产控制台</p><h1>{section}</h1></div><div className="top-actions"><label className="search"><span>⌕</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索当前数据"/></label><button className="icon-btn" aria-label="通知">♢<i/></button>{!(["生产明细","文件资产","设备管理","耗材卷同步","经营分析","良率分析"] as Section[]).includes(section)&&<button className="primary" onClick={openCreate}>＋ 新建{section==="概览"?"任务":section}</button>}</div></header>
       <div className="workspace">
         <div className="date-row"><div><span className="live-dot"/> {loading?"正在读取生产数据":"实时生产数据"}</div><time>2026年7月20日 · 星期一</time></div>
-        {section === "概览" ? <Dashboard data={data} metrics={{printing,waiting,completed,alerts}} onNavigate={setSection} onAdvance={advanceJob}/> : section === "经营分析" ? <Analytics toast={toast}/> : section === "生产明细" ? <ProductionDetails data={data} toast={toast} onWorkspaceChanged={loadData}/> : section === "文件资产" ? <FileAssets data={data} toast={toast}/> : section === "设备管理" ? <PrinterManager toast={toast}/> : section === "耗材卷同步" ? <SpoolmanInventory toast={toast}/> : <Management section={section} filtered={filtered} onDelete={remove} onAction={runJobAction} onCost={updateMaterialCost}/>}
+        {section === "概览" ? <Dashboard data={data} metrics={{printing,waiting,completed,alerts}} onNavigate={setSection} onAdvance={advanceJob}/> : section === "经营分析" ? <Analytics toast={toast}/> : section === "良率分析" ? <QualityAnalytics toast={toast}/> : section === "生产明细" ? <ProductionDetails data={data} toast={toast} onWorkspaceChanged={loadData}/> : section === "文件资产" ? <FileAssets data={data} toast={toast}/> : section === "设备管理" ? <PrinterManager toast={toast}/> : section === "耗材卷同步" ? <SpoolmanInventory toast={toast}/> : <Management section={section} filtered={filtered} onDelete={remove} onAction={runJobAction} onCost={updateMaterialCost}/>}
       </div>
     </section>
     {modal ? <CreateModal entity={modal} data={data} onClose={() => setModal(null)} onSaved={async () => { setModal(null); toast("记录已保存"); await loadData(); }}/> : null}
@@ -158,8 +159,10 @@ function JobActions({job,onAction,onDelete}:{job:Job;onAction:(j:Job,a:string)=>
   return <div className="row-actions job-actions">{(actions[job.status]||[]).map(a=><button key={a.key} onClick={()=>onAction(job,a.key)}>{a.label}</button>)}{!["打印中","已暂停"].includes(job.status)&&<button className="danger-link" onClick={onDelete}>删除</button>}</div>;
 }
 
-type AnalyticsData={summary:{revenue:number;materialCost:number;machineCost:number;totalCost:number;grossProfit:number;margin:number;successRate:number;utilization:number;completed:number};orders:Array<{orderNo:string;customer:string;status:string;revenue:number;jobs:number;completedJobs:number}>;trends:Array<{day:string;completed:number}>};
+type QualityRow={name:string;total:number;completed:number;failed:number};type AnalyticsData={summary:{revenue:number;materialCost:number;machineCost:number;totalCost:number;grossProfit:number;margin:number;successRate:number;utilization:number;completed:number;reworks:number};orders:Array<{orderNo:string;customer:string;status:string;revenue:number;jobs:number;completedJobs:number}>;trends:Array<{day:string;completed:number}>;byPrinter:QualityRow[];byItem:QualityRow[];reasons:Array<{reason:string;count:number}>};
 function Analytics({toast}:{toast:(m:string)=>void}){const [data,setData]=useState<AnalyticsData|null>(null);useEffect(()=>{fetch("/api/analytics",{cache:"no-store"}).then(r=>r.json().then(v=>({ok:r.ok,v}))).then(({ok,v})=>ok?setData(v):toast(v.error||"分析数据读取失败")).catch(()=>toast("分析数据读取失败"));},[]);if(!data)return <div className="empty-state">正在计算经营数据…</div>;const s=data.summary;const money=(v:number)=>`¥${v.toFixed(2)}`;const max=Math.max(1,...data.trends.map(x=>x.completed));return <section><div className="analytics-metrics"><Metric label="订单收入" value={money(s.revenue)} unit="累计报价" delta="订单明细汇总" accent="green"/><Metric label="生产总成本" value={money(s.totalCost)} unit="材料 + 工时" delta={`材料 ${money(s.materialCost)}`} accent="orange"/><Metric label="预计毛利" value={money(s.grossProfit)} unit={`${s.margin.toFixed(1)}% 毛利率`} delta="未含税费与人工" accent="blue"/><Metric label="打印成功率" value={`${s.successRate.toFixed(1)}%`} unit={`${s.completed} 个完成任务`} delta={`设备利用率 ${s.utilization.toFixed(1)}%`} accent="red"/></div><div className="analytics-grid"><div className="panel"><PanelHead eyebrow="7 DAY OUTPUT" title="近 7 日完成趋势"/><div className="trend-chart">{data.trends.map(x=><div key={x.day}><span style={{height:`${Math.max(6,x.completed/max*100)}%`}} title={`${x.completed} 个任务`}/><b>{x.completed}</b><small>{x.day.slice(5)}</small></div>)}</div></div><div className="panel"><PanelHead eyebrow="COST STRUCTURE" title="成本结构"/><div className="cost-stack"><div><span>材料成本</span><b>{money(s.materialCost)}</b></div><div><span>设备工时</span><b>{money(s.machineCost)}</b></div><div className="total"><span>合计</span><b>{money(s.totalCost)}</b></div><p>请在耗材批次填写每公斤成本，在设备档案填写每小时成本，数据才会完整。</p></div></div></div><div className="panel analytics-orders"><PanelHead eyebrow="ORDER PROFITABILITY" title="订单收入与生产进度"/><div className="table-wrap"><table><thead><tr><th>订单</th><th>客户</th><th>状态</th><th>收入</th><th>打印任务</th><th>已完成</th></tr></thead><tbody>{data.orders.map(o=><tr key={o.orderNo}><td>{o.orderNo}</td><td>{o.customer}</td><td><span className="badge">{o.status}</span></td><td>{money(Number(o.revenue))}</td><td>{o.jobs}</td><td>{o.completedJobs}</td></tr>)}</tbody></table></div></div></section>}
+
+function QualityAnalytics({toast}:{toast:(m:string)=>void}){const [data,setData]=useState<AnalyticsData|null>(null);useEffect(()=>{fetch("/api/analytics",{cache:"no-store"}).then(r=>r.json().then(v=>({ok:r.ok,v}))).then(({ok,v})=>ok?setData(v):toast(v.error||"良率数据读取失败")).catch(()=>toast("良率数据读取失败"));},[]);if(!data)return <div className="empty-state">正在计算良率数据…</div>;const quality=(row:QualityRow)=>row.total?row.completed/row.total*100:0;const table=(rows:QualityRow[],label:string)=><div className="panel quality-panel"><PanelHead eyebrow="YIELD BREAKDOWN" title={label}/><div className="table-wrap"><table><thead><tr><th>名称</th><th>总任务</th><th>成功</th><th>失败</th><th>成功率</th></tr></thead><tbody>{rows.map(row=><tr key={row.name}><td>{row.name}</td><td>{row.total}</td><td>{row.completed}</td><td>{row.failed}</td><td><b className={quality(row)<90?"quality-warn":"quality-ok"}>{quality(row).toFixed(1)}%</b></td></tr>)}</tbody></table></div></div>;return <section><div className="quality-head"><div><small>QUALITY CONTROL</small><h2>生产良率复盘</h2><p>失败时必须填写原因；重打会计入返工次数。</p></div><div><strong>{data.summary.successRate.toFixed(1)}%</strong><span>总体成功率</span></div><div><strong>{data.summary.reworks}</strong><span>累计返工</span></div><a className="primary" href="/api/analytics?format=csv">导出 CSV</a></div><div className="quality-grid">{table(data.byPrinter,"按打印机")}{table(data.byItem,"按打印物品")}</div><div className="panel"><PanelHead eyebrow="FAILURE PARETO" title="失败原因分布"/><div className="reason-list">{data.reasons.map((item,index)=><div key={item.reason}><b>{index+1}</b><span>{item.reason}</span><i style={{width:`${item.count/Math.max(1,...data.reasons.map(r=>r.count))*100}%`}}/><strong>{item.count} 次</strong></div>)}{data.reasons.length===0&&<div className="empty-state">暂无失败记录。</div>}</div></div></section>}
 
 type SyncedSpool={id:number;externalId:number;filamentName:string;vendor:string;material:string;colorHex:string;initialWeight:number|null;remainingWeight:number|null;usedWeight:number|null;location:string;lotNr:string;archived:boolean;lastUsed:string|null;lastSeenAt:string};
 type SpoolPrinter={id:number;name:string;connectionState:string;activeSpoolExternalId:number|null};
