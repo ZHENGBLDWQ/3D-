@@ -442,13 +442,14 @@ export async function PATCH(request: Request) {
       const d1 = getD1();
       const job = await d1
         .prepare(
-          "SELECT id, item_id, order_id, status, progress, quantity, material_deducted FROM print_jobs WHERE id = ?",
+          "SELECT id, item_id, order_id, printer_name, status, progress, quantity, material_deducted FROM print_jobs WHERE id = ?",
         )
         .bind(payload.id)
         .first<{
           id: number;
           item_id: number | null;
           order_id: number | null;
+          printer_name: string;
           status: string;
           progress: number;
           quantity: number;
@@ -543,6 +544,14 @@ export async function PATCH(request: Request) {
                   "INSERT INTO inventory_transactions (batch_id, job_id, type, grams, note) VALUES (?, ?, '打印消耗', ?, ?)",
                 )
                 .bind(spec.batch_id, job.id, -required, `任务完成自动扣料`),
+            );
+            statements.push(
+              d1.prepare(`UPDATE inventory_printer_allocations
+                SET remaining_grams=MAX(0,remaining_grams-?),updated_at=CURRENT_TIMESTAMP,
+                    status=CASE WHEN remaining_grams-?<=0 THEN '已用完' ELSE status END
+                WHERE id=(SELECT a.id FROM inventory_printer_allocations a JOIN printers p ON p.id=a.printer_id
+                  WHERE p.name=? AND a.batch_id=? AND a.status='使用中' ORDER BY a.assigned_at LIMIT 1)`)
+                .bind(required,required,job.printer_name,spec.batch_id),
             );
           }
         }

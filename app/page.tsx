@@ -1,6 +1,7 @@
 "use client";
 
 import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
+import InventoryCenter from "./inventory-center";
 
 type Section =
   | "概览"
@@ -69,6 +70,31 @@ type InventoryTransaction = {
 };
 type InventoryData = {
   materials: InventoryMaterial[];
+  products: Array<InventoryMaterial & {
+    printerOccupiedGrams: number;
+    taskOccupiedGrams: number;
+    occupiedGrams: number;
+    inTransitGrams: number;
+    usage3Days: number;
+    usage15Days: number;
+    usage30Days: number;
+  }>;
+  printers: Array<{
+    id: number;
+    name: string;
+    model: string;
+    location: string;
+    status: string;
+    connectionState: string;
+    currentFile: string | null;
+    remoteProgress: number | null;
+    nozzleTemp: number | null;
+    bedTemp: number | null;
+    lastSeenAt: string | null;
+    allocations: Array<{ id:number; batchId:number; sku:string; material:string; color:string; brand:string; amsUnit:number|null; trayIndex:number|null; allocatedGrams:number; remainingGrams:number; assignedAt:string }>;
+    amsSlots: Array<{ amsUnit:number; trayIndex:number; material:string; colorHex:string; remainingPercent:number|null; active:boolean; lastSeenAt:string }>;
+  }>;
+  transit: Array<{ id:number; batchId:number; sku:string; material:string; color:string; grams:number; supplier:string; purchaseNo:string; eta:string|null; status:string; operator:string; createdAt:string }>;
   transactions: InventoryTransaction[];
   stocktakes: Array<{
     id: number;
@@ -622,7 +648,7 @@ function Dashboard({
   );
 }
 
-function InventoryCenter({ toast }: { toast: (message: string) => void }) {
+function LegacyInventoryCenter({ toast }: { toast: (message: string) => void }) {
   const [inventory, setInventory] = useState<InventoryData | null>(null);
   const [dialog, setDialog] = useState<"create" | "movement" | "stocktake" | null>(null);
   const [selectedBatch, setSelectedBatch] = useState<number | null>(null);

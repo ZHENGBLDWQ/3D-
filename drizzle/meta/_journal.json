@@ -127,6 +127,13 @@
       "when": 1784544316055,
       "tag": "0017_inventory_control",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1784545865830,
+      "tag": "0018_inventory_printer_stock",
+      "breakpoints": true
     }
   ]
 }

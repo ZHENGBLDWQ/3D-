@@ -5,7 +5,11 @@ type InventoryAction =
   | "createMaterial"
   | "movement"
   | "stocktake"
-  | "updateMaterial";
+  | "updateMaterial"
+  | "transferToPrinter"
+  | "returnFromPrinter"
+  | "createTransit"
+  | "receiveTransit";
 
 async function ensureInventorySchema() {
   const d1 = getD1();
@@ -46,8 +50,39 @@ async function ensureInventorySchema() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (batch_id) REFERENCES material_batches(id)
     )`),
+    d1.prepare(`CREATE TABLE IF NOT EXISTS inventory_printer_allocations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      printer_id INTEGER NOT NULL,
+      batch_id INTEGER NOT NULL,
+      ams_unit INTEGER,
+      tray_index INTEGER,
+      allocated_grams REAL NOT NULL,
+      remaining_grams REAL NOT NULL,
+      status TEXT NOT NULL DEFAULT '使用中',
+      operator TEXT NOT NULL DEFAULT '',
+      assigned_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (printer_id) REFERENCES printers(id),
+      FOREIGN KEY (batch_id) REFERENCES material_batches(id)
+    )`),
+    d1.prepare(`CREATE TABLE IF NOT EXISTS inventory_in_transit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      batch_id INTEGER NOT NULL,
+      grams REAL NOT NULL,
+      supplier TEXT NOT NULL DEFAULT '',
+      purchase_no TEXT NOT NULL DEFAULT '',
+      eta TEXT,
+      status TEXT NOT NULL DEFAULT '在途',
+      operator TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      received_at TEXT,
+      FOREIGN KEY (batch_id) REFERENCES material_batches(id)
+    )`),
     d1.prepare("CREATE INDEX IF NOT EXISTS inventory_transactions_batch_created_idx ON inventory_transactions(batch_id,created_at DESC)"),
     d1.prepare("CREATE INDEX IF NOT EXISTS inventory_stocktakes_batch_created_idx ON inventory_stocktakes(batch_id,created_at DESC)"),
+    d1.prepare("CREATE INDEX IF NOT EXISTS inventory_allocations_printer_idx ON inventory_printer_allocations(printer_id,status)"),
+    d1.prepare("CREATE INDEX IF NOT EXISTS inventory_allocations_batch_idx ON inventory_printer_allocations(batch_id,status)"),
+    d1.prepare("CREATE INDEX IF NOT EXISTS inventory_transit_batch_idx ON inventory_in_transit(batch_id,status)"),
   ]);
 }
 
@@ -66,7 +101,7 @@ export async function GET() {
   try {
     await ensureInventorySchema();
     const d1 = getD1();
-    const [materials, transactions, stocktakes, summary] = await Promise.all([
+    const [materials, transactions, stocktakes, summary, products, printers, transit] = await Promise.all([
       d1.prepare(`SELECT
         b.id,b.material,b.color,b.brand,b.initial_grams initialGrams,
         b.remaining_grams remainingGrams,b.low_stock_grams lowStockGrams,
@@ -99,8 +134,37 @@ export async function GET() {
         COALESCE((SELECT SUM(ABS(grams)) FROM inventory_transactions WHERE type IN ('打印消耗','生产领用') AND datetime(created_at)>=datetime('now','start of month')),0) monthlyUsageGrams,
         COALESCE((SELECT SUM(ABS(grams)) FROM inventory_transactions WHERE type IN ('损耗','盘亏') AND datetime(created_at)>=datetime('now','start of month')),0) monthlyWasteGrams
       FROM material_batches`).first(),
+      d1.prepare(`SELECT b.id,b.material,b.color,b.brand,b.remaining_grams remainingGrams,b.low_stock_grams lowStockGrams,b.cost_per_kg costPerKg,
+        COALESCE(m.sku,'MAT-'||printf('%04d',b.id)) sku,COALESCE(m.specification,'') specification,
+        COALESCE(m.spool_weight_grams,1000) spoolWeightGrams,COALESCE(m.supplier,'') supplier,
+        COALESCE(m.warehouse,'主仓') warehouse,COALESCE(m.location,'') location,
+        COALESCE((SELECT SUM(a.remaining_grams) FROM inventory_printer_allocations a WHERE a.batch_id=b.id AND a.status='使用中'),0) printerOccupiedGrams,
+        COALESCE((SELECT SUM(im.grams_per_item*j.quantity*(1+im.waste_percent/100.0)) FROM print_jobs j JOIN item_materials im ON im.item_id=j.item_id WHERE im.batch_id=b.id AND j.status IN ('排队','打印中','已暂停') AND j.material_deducted=0),0)
+          + COALESCE((SELECT SUM(e.estimated_grams) FROM external_print_jobs e WHERE e.batch_id=b.id AND e.completed_at IS NULL AND e.inventory_deducted=0),0) taskOccupiedGrams,
+        COALESCE((SELECT SUM(t.grams) FROM inventory_in_transit t WHERE t.batch_id=b.id AND t.status='在途'),0) inTransitGrams,
+        COALESCE((SELECT SUM(ABS(t.grams)) FROM inventory_transactions t WHERE t.batch_id=b.id AND t.grams<0 AND t.type IN ('打印消耗','生产领用') AND datetime(t.created_at)>=datetime('now','-3 days')),0) usage3Days,
+        COALESCE((SELECT SUM(ABS(t.grams)) FROM inventory_transactions t WHERE t.batch_id=b.id AND t.grams<0 AND t.type IN ('打印消耗','生产领用') AND datetime(t.created_at)>=datetime('now','-15 days')),0) usage15Days,
+        COALESCE((SELECT SUM(ABS(t.grams)) FROM inventory_transactions t WHERE t.batch_id=b.id AND t.grams<0 AND t.type IN ('打印消耗','生产领用') AND datetime(t.created_at)>=datetime('now','-30 days')),0) usage30Days
+      FROM material_batches b LEFT JOIN material_inventory_meta m ON m.batch_id=b.id ORDER BY b.material,b.color`).all(),
+      d1.prepare(`SELECT p.id,p.name,p.model,p.location,p.status,p.connection_state connectionState,p.current_file currentFile,p.remote_progress remoteProgress,
+        p.nozzle_temp nozzleTemp,p.bed_temp bedTemp,p.last_seen_at lastSeenAt,
+        COALESCE((SELECT json_group_array(json_object('id',a.id,'batchId',a.batch_id,'sku',COALESCE(m.sku,'MAT-'||printf('%04d',b.id)),'material',b.material,'color',b.color,'brand',b.brand,'amsUnit',a.ams_unit,'trayIndex',a.tray_index,'allocatedGrams',a.allocated_grams,'remainingGrams',a.remaining_grams,'assignedAt',a.assigned_at)) FROM inventory_printer_allocations a JOIN material_batches b ON b.id=a.batch_id LEFT JOIN material_inventory_meta m ON m.batch_id=b.id WHERE a.printer_id=p.id AND a.status='使用中'),'[]') allocations,
+        COALESCE((SELECT json_group_array(json_object('amsUnit',s.ams_unit,'trayIndex',s.tray_index,'material',s.material,'colorHex',s.color_hex,'remainingPercent',s.remaining_percent,'active',s.active,'lastSeenAt',s.last_seen_at)) FROM bambu_ams_slots s WHERE s.printer_id=p.id),'[]') amsSlots
+      FROM printers p ORDER BY p.name`).all(),
+      d1.prepare(`SELECT t.id,t.batch_id batchId,COALESCE(m.sku,'MAT-'||printf('%04d',b.id)) sku,b.material,b.color,t.grams,t.supplier,t.purchase_no purchaseNo,t.eta,t.status,t.operator,t.created_at createdAt
+      FROM inventory_in_transit t JOIN material_batches b ON b.id=t.batch_id LEFT JOIN material_inventory_meta m ON m.batch_id=b.id ORDER BY CASE WHEN t.status='在途' THEN 0 ELSE 1 END,t.id DESC`).all(),
     ]);
-    return Response.json({ materials: materials.results, transactions: transactions.results, stocktakes: stocktakes.results, summary });
+    const productRows = products.results.map((row) => {
+      const item = row as Record<string, unknown>;
+      const occupiedGrams = Number(item.printerOccupiedGrams || 0) + Number(item.taskOccupiedGrams || 0);
+      return { ...item, occupiedGrams, availableGrams: Math.max(0, Number(item.remainingGrams || 0) - occupiedGrams) };
+    });
+    const printerRows = printers.results.map((row) => {
+      const item = row as Record<string, unknown>;
+      const parse = (value: unknown) => { try { return JSON.parse(String(value || "[]")); } catch { return []; } };
+      return { ...item, allocations: parse(item.allocations), amsSlots: parse(item.amsSlots) };
+    });
+    return Response.json({ materials: materials.results, products: productRows, printers: printerRows, transit: transit.results, transactions: transactions.results, stocktakes: stocktakes.results, summary });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "读取库存失败" }, { status: 500 });
   }
@@ -146,6 +210,53 @@ export async function POST(request: Request) {
         d1.prepare("UPDATE material_batches SET remaining_grams=remaining_grams+? WHERE id=?").bind(delta,batchId),
         d1.prepare("INSERT INTO inventory_transaction_meta(transaction_id,document_no,operator,warehouse,source) VALUES(?,?,?,?,?)")
           .bind(Number(tx.meta.last_row_id),text(body.documentNo),text(body.operator),text(body.warehouse)||"主仓",text(body.source)||"人工"),
+      ]);
+      return Response.json({ ok: true }, { status: 201 });
+    }
+    if (body.action === "transferToPrinter") {
+      const batchId = Number(body.batchId), printerId = Number(body.printerId), grams = positive(body.grams);
+      if (!batchId || !printerId || !grams) return Response.json({ error: "耗材、打印机和出库克重必填" }, { status: 400 });
+      const batch = await d1.prepare(`SELECT b.remaining_grams remainingGrams,
+        COALESCE((SELECT SUM(a.remaining_grams) FROM inventory_printer_allocations a WHERE a.batch_id=b.id AND a.status='使用中'),0) occupiedGrams
+        FROM material_batches b WHERE b.id=?`).bind(batchId).first<{remainingGrams:number;occupiedGrams:number}>();
+      const printer = await d1.prepare("SELECT name FROM printers WHERE id=?").bind(printerId).first<{name:string}>();
+      if (!batch || !printer) return Response.json({ error: "耗材或打印机不存在" }, { status: 404 });
+      const available = Number(batch.remainingGrams) - Number(batch.occupiedGrams || 0);
+      if (grams > available) return Response.json({ error: `仓库可用量不足，仅剩 ${available.toFixed(1)}g` }, { status: 400 });
+      const allocation = await d1.prepare(`INSERT INTO inventory_printer_allocations(printer_id,batch_id,ams_unit,tray_index,allocated_grams,remaining_grams,status,operator)
+        VALUES(?,?,?,?,?,?,'使用中',?)`).bind(printerId,batchId,body.amsUnit === "" ? null : Number(body.amsUnit),body.trayIndex === "" ? null : Number(body.trayIndex),grams,grams,text(body.operator)).run();
+      const tx = await d1.prepare("INSERT INTO inventory_transactions(batch_id,type,grams,note) VALUES(?,'调拨到打印机',0,?)")
+        .bind(batchId,`${grams}g → ${printer.name}${body.amsUnit !== "" ? ` / AMS ${body.amsUnit}-${body.trayIndex}` : ""}`).run();
+      await d1.prepare("INSERT INTO inventory_transaction_meta(transaction_id,document_no,operator,warehouse,source) VALUES(?,?,?,?,?)")
+        .bind(Number(tx.meta.last_row_id),text(body.documentNo),text(body.operator),"打印机在用库","仓库调拨").run();
+      return Response.json({ ok: true, allocationId: allocation.meta.last_row_id }, { status: 201 });
+    }
+    if (body.action === "returnFromPrinter") {
+      const allocationId = Number(body.allocationId), grams = positive(body.grams);
+      const allocation = await d1.prepare(`SELECT a.*,p.name printerName FROM inventory_printer_allocations a JOIN printers p ON p.id=a.printer_id WHERE a.id=? AND a.status='使用中'`).bind(allocationId).first<Record<string,unknown>>();
+      if (!allocation || !grams || grams > Number(allocation.remaining_grams)) return Response.json({ error: "退回数量无效或超过在机余量" }, { status: 400 });
+      const remaining = Number(allocation.remaining_grams) - grams;
+      await d1.prepare("UPDATE inventory_printer_allocations SET remaining_grams=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(remaining,remaining <= 0 ? "已退回" : "使用中",allocationId).run();
+      const tx = await d1.prepare("INSERT INTO inventory_transactions(batch_id,type,grams,note) VALUES(?,'打印机退回',0,?)").bind(Number(allocation.batch_id),`${allocation.printerName}退回 ${grams}g`).run();
+      await d1.prepare("INSERT INTO inventory_transaction_meta(transaction_id,document_no,operator,warehouse,source) VALUES(?,?,?,?,?)").bind(Number(tx.meta.last_row_id),text(body.documentNo),text(body.operator),"主仓","打印机退料").run();
+      return Response.json({ ok: true }, { status: 201 });
+    }
+    if (body.action === "createTransit") {
+      const batchId = Number(body.batchId), grams = positive(body.grams);
+      if (!batchId || !grams) return Response.json({ error: "耗材和采购在途数量必填" }, { status: 400 });
+      const result = await d1.prepare("INSERT INTO inventory_in_transit(batch_id,grams,supplier,purchase_no,eta,status,operator) VALUES(?,?,?,?,?,'在途',?)")
+        .bind(batchId,grams,text(body.supplier),text(body.purchaseNo),text(body.eta)||null,text(body.operator)).run();
+      return Response.json({ ok: true, transitId: result.meta.last_row_id }, { status: 201 });
+    }
+    if (body.action === "receiveTransit") {
+      const transitId = Number(body.transitId);
+      const row = await d1.prepare("SELECT * FROM inventory_in_transit WHERE id=? AND status='在途'").bind(transitId).first<Record<string,unknown>>();
+      if (!row) return Response.json({ error: "在途采购不存在或已经收货" }, { status: 404 });
+      const tx = await d1.prepare("INSERT INTO inventory_transactions(batch_id,type,grams,note) VALUES(?,'采购入库',?,?)").bind(Number(row.batch_id),Number(row.grams),`在途收货 ${row.purchase_no || ""}`).run();
+      await d1.batch([
+        d1.prepare("UPDATE material_batches SET remaining_grams=remaining_grams+? WHERE id=?").bind(Number(row.grams),Number(row.batch_id)),
+        d1.prepare("UPDATE inventory_in_transit SET status='已入库',received_at=CURRENT_TIMESTAMP WHERE id=?").bind(transitId),
+        d1.prepare("INSERT INTO inventory_transaction_meta(transaction_id,document_no,operator,warehouse,source) VALUES(?,?,?,?,?)").bind(Number(tx.meta.last_row_id),String(row.purchase_no||""),text(body.operator)||String(row.operator||""),"主仓","采购收货"),
       ]);
       return Response.json({ ok: true }, { status: 201 });
     }

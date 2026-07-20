@@ -38,7 +38,7 @@ export async function PATCH(request: Request) {
     const d1 = getD1();
     const job = await d1
       .prepare(
-        "SELECT id,status,result,consumed_grams consumedGrams,inventory_deducted inventoryDeducted FROM external_print_jobs WHERE id=?",
+        "SELECT id,printer_id printerId,status,result,consumed_grams consumedGrams,inventory_deducted inventoryDeducted FROM external_print_jobs WHERE id=?",
       )
       .bind(body.id)
       .first<Record<string, number | string>>();
@@ -95,6 +95,13 @@ export async function PATCH(request: Request) {
             "UPDATE external_print_jobs SET inventory_deducted=1,status='已结算' WHERE id=?",
           )
           .bind(body.id),
+      );
+      statements.push(
+        d1.prepare(`UPDATE inventory_printer_allocations
+          SET remaining_grams=MAX(0,remaining_grams-?),updated_at=CURRENT_TIMESTAMP,
+              status=CASE WHEN remaining_grams-?<=0 THEN '已用完' ELSE status END
+          WHERE id=(SELECT id FROM inventory_printer_allocations WHERE printer_id=? AND batch_id=? AND status='使用中' ORDER BY assigned_at LIMIT 1)`)
+          .bind(amount,amount,Number(job.printerId),body.batchId),
       );
     }
     await d1.batch(statements);

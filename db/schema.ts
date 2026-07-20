@@ -163,6 +163,33 @@ export const inventoryStocktakes = sqliteTable("inventory_stocktakes", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const inventoryPrinterAllocations = sqliteTable("inventory_printer_allocations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  printerId: integer("printer_id").notNull(),
+  batchId: integer("batch_id").notNull().references(() => materialBatches.id),
+  amsUnit: integer("ams_unit"),
+  trayIndex: integer("tray_index"),
+  allocatedGrams: real("allocated_grams").notNull(),
+  remainingGrams: real("remaining_grams").notNull(),
+  status: text("status").notNull().default("使用中"),
+  operator: text("operator").notNull().default(""),
+  assignedAt: text("assigned_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const inventoryInTransit = sqliteTable("inventory_in_transit", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  batchId: integer("batch_id").notNull().references(() => materialBatches.id),
+  grams: real("grams").notNull(),
+  supplier: text("supplier").notNull().default(""),
+  purchaseNo: text("purchase_no").notNull().default(""),
+  eta: text("eta"),
+  status: text("status").notNull().default("在途"),
+  operator: text("operator").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  receivedAt: text("received_at"),
+});
+
 export const orderItems = sqliteTable("order_items", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   orderId: integer("order_id")

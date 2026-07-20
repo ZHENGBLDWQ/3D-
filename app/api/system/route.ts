@@ -1,7 +1,7 @@
 import { getD1 } from "../../../db";
 import { requireApiAccess } from "../../api-auth";
 
-const tables=["print_items","material_batches","material_inventory_meta","orders","order_items","item_materials","print_jobs","print_job_events","inventory_transactions","inventory_transaction_meta","inventory_stocktakes","print_files","printers","printer_commands","spoolman_spools"] as const;
+const tables=["print_items","material_batches","material_inventory_meta","orders","order_items","item_materials","print_jobs","print_job_events","inventory_transactions","inventory_transaction_meta","inventory_stocktakes","inventory_printer_allocations","inventory_in_transit","print_files","printers","printer_commands","spoolman_spools"] as const;
 
 export async function GET(request:Request){
   const url=new URL(request.url);const backup=url.searchParams.get("format")==="backup";

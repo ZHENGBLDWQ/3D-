@@ -2390,3 +2390,79 @@ td button {
   .spool-visual { width: 78px; height: 78px; }
   .inventory-flow-panel { display: none; }
 }
+
+.stock-workspace-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 6px; background: #e8eeeb; border-radius: 16px; }
+.stock-workspace-tabs button { min-height: 66px; padding: 12px 18px; border: 0; border-radius: 12px; background: transparent; color: #66766e; cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 4px; }
+.stock-workspace-tabs button.active { background: #fff; color: #203d32; box-shadow: 0 5px 18px rgba(30,55,45,.08); }
+.stock-workspace-tabs strong { font-size: 17px; }
+.stock-workspace-tabs span { font-size: 12px; }
+.stock-kpis { grid-template-columns: repeat(6,minmax(0,1fr)); }
+.stock-ledger-toolbar { margin-top: 0; }
+.stock-query-bar { grid-template-columns: 1fr auto; }
+.stock-query-bar > span { color: #7b8982; font-size: 13px; }
+.stock-ledger-table table { min-width: 1480px; }
+.stock-ledger-table td { vertical-align: middle; }
+.stock-product-spool { --spool-color:#aab6b1; --spool-level:100%; width: 50px; height: 50px; position: relative; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--spool-color) var(--spool-level),#e3e9e6 0); box-shadow: inset 0 0 0 6px rgba(255,255,255,.62); }
+.stock-product-spool::after { content:""; position:absolute; width:18px; height:18px; background:#fff; border:2px solid #dce4e0; border-radius:50%; }
+.stock-product-spool i { z-index:1; position:absolute; width:5px; height:5px; border-radius:50%; background:#aeb9b4; }
+.stock-product-spool i:nth-child(1){transform:translateY(-13px)}
+.stock-product-spool i:nth-child(2){transform:translate(11px,7px)}
+.stock-product-spool i:nth-child(3){transform:translate(-11px,7px)}
+.stock-warning { display:inline-flex; padding:5px 9px; border-radius:99px; font-size:12px; font-weight:700; }
+.stock-warning.safe { color:#21825e; background:#e8f6ef; }
+.stock-warning.danger { color:#c74740; background:#fff0ee; }
+.transit-panel { padding: 22px 24px; }
+.transit-list { display:flex; flex-direction:column; gap:9px; }
+.transit-list > div { display:grid; grid-template-columns:1fr 180px auto; gap:16px; align-items:center; padding:13px 15px; border:1px solid #e0e7e3; border-radius:12px; }
+.transit-list span { display:flex; min-width:0; flex-direction:column; gap:3px; }
+.transit-list small { color:#829088; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.transit-list button { border:0; border-radius:9px; background:#203d32; color:#fff; padding:10px 14px; cursor:pointer; }
+.active-printer-head { margin-top:0; }
+.printer-material-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
+.printer-material-card { border:1px solid #dde5e1; border-radius:18px; background:#fff; padding:20px; box-shadow:0 8px 26px rgba(29,48,39,.05); }
+.printer-material-card > header { display:flex; justify-content:space-between; align-items:flex-start; gap:14px; padding-bottom:16px; border-bottom:1px solid #edf1ef; }
+.printer-material-card > header > div { display:flex; align-items:center; gap:11px; }
+.printer-material-card h3 { margin:0 0 4px; font-size:20px; }
+.printer-material-card p { margin:0; color:#849189; font-size:12px; }
+.printer-material-card > header > span { background:#f1f5f3; color:#53675e; padding:6px 10px; border-radius:99px; font-size:12px; }
+.printer-online-dot { width:11px; height:11px; border-radius:50%; background:#b7c0bc; box-shadow:0 0 0 5px #f0f3f2; }
+.printer-online-dot.online { background:#2db47e; box-shadow:0 0 0 5px #e7f7f0; }
+.printer-live-strip { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin:15px 0; }
+.printer-live-strip div { min-width:0; background:#f5f8f6; border-radius:10px; padding:10px; }
+.printer-live-strip small,.printer-live-strip strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.printer-live-strip small { color:#829087; font-size:10px; margin-bottom:4px; }
+.printer-live-strip strong { font-size:12px; }
+.printer-material-card section { margin-top:18px; }
+.printer-section-title { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.printer-section-title small { color:#86938c; }
+.ams-slot-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:7px; }
+.ams-slot-grid > div { min-width:0; border:1px solid #e0e7e3; border-radius:10px; padding:9px; display:flex; flex-direction:column; gap:4px; }
+.ams-slot-grid > div.active { border-color:#5bb894; background:#f0faf6; }
+.ams-slot-grid strong,.ams-slot-grid small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ams-slot-grid strong { font-size:11px; }
+.ams-slot-grid small { font-size:10px; color:#829087; }
+.ams-color { display:block; width:20px; height:20px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px #d9e1dd; }
+.ams-empty { grid-column:1/-1; color:#85928b; text-align:center; padding:22px!important; }
+.printer-allocation-list { display:flex; flex-direction:column; gap:8px; }
+.printer-allocation-list > div { display:grid; grid-template-columns:50px 1fr auto; gap:10px; align-items:center; border:1px solid #e2e8e5; border-radius:12px; padding:10px; }
+.printer-allocation-list span { min-width:0; display:flex; flex-direction:column; gap:3px; }
+.printer-allocation-list small { color:#829087; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.printer-allocation-list span:last-child { align-items:flex-end; }
+.printer-allocation-list button { border:0; background:transparent; color:#d15a50; padding:2px 0; cursor:pointer; font-size:11px; }
+.printer-transfer-button { width:100%; margin-top:14px; min-height:40px; border:1px dashed #aebdb6; border-radius:10px; background:#f8faf9; color:#355147; cursor:pointer; }
+
+@media(max-width:1250px){
+  .stock-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .printer-material-grid{grid-template-columns:1fr}
+}
+@media(max-width:720px){
+  .stock-workspace-tabs{grid-template-columns:1fr}
+  .stock-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stock-ledger-toolbar{align-items:flex-start}
+  .stock-ledger-toolbar>div:last-child{display:grid;grid-template-columns:1fr 1fr;width:100%}
+  .stock-query-bar{grid-template-columns:1fr}
+  .transit-list>div{grid-template-columns:1fr}
+  .printer-material-card{padding:15px}
+  .printer-live-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ams-slot-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
