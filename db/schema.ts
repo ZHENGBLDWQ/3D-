@@ -4,6 +4,7 @@ import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 export const organizations = sqliteTable("organizations", { id: integer("id").primaryKey({ autoIncrement: true }), name: text("name").notNull(), slug: text("slug").notNull().unique(), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`) });
 export const organizationMembers = sqliteTable("organization_members", { id: integer("id").primaryKey({ autoIncrement: true }), organizationId: integer("organization_id").notNull().references(() => organizations.id), email: text("email").notNull().unique(), displayName: text("display_name").notNull().default(""), role: text("role").notNull().default("operator"), status: text("status").notNull().default("invited"), printerScope: text("printer_scope").notNull().default("[]"), invitedBy: text("invited_by").notNull().default(""), passwordHash: text("password_hash"), lastLoginAt: text("last_login_at"), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`) });
 export const auditLogs = sqliteTable("audit_logs", { id: integer("id").primaryKey({ autoIncrement: true }), organizationId: integer("organization_id").notNull().references(() => organizations.id), actorEmail: text("actor_email").notNull(), action: text("action").notNull(), resource: text("resource").notNull().default("system"), resourceId: text("resource_id").notNull().default(""), detail: text("detail").notNull().default("{}"), ipAddress: text("ip_address").notNull().default(""), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`) });
+export const costSettings = sqliteTable("cost_settings", { id: integer("id").primaryKey(), electricityRate: real("electricity_rate").notNull().default(0.8), laborRate: real("labor_rate").notNull().default(0), laborMinutesPerJob: real("labor_minutes_per_job").notNull().default(0), overheadPercent: real("overhead_percent").notNull().default(0), updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`) });
 
 export const printItems = sqliteTable("print_items", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -118,6 +119,7 @@ export const printers = sqliteTable("printers", {
   status: text("status").notNull().default("空闲"),
   totalHours: real("total_hours").notNull().default(0),
   hourlyRate: real("hourly_rate").notNull().default(0),
+  powerWatts: real("power_watts").notNull().default(1000),
   maintenanceDueAt: text("maintenance_due_at"),
   notes: text("notes").notNull().default(""),
   connectorType: text("connector_type").notNull().default("manual"),
