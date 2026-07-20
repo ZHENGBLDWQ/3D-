@@ -1,10 +1,12 @@
 import { desc, eq } from "drizzle-orm";
 import { getD1, getDb } from "../../../db";
 import { inventoryTransactions, itemMaterials, materialBatches, orderItems, orders, printItems, printJobEvents, printJobs } from "../../../db/schema";
+import { requireApiAccess } from "../../api-auth";
 
 type DetailEntity = "orderLine" | "bom" | "transaction";
 
 export async function GET() {
+  const denied = await requireApiAccess(); if (denied) return denied;
   try {
     const db = getDb();
     const [lines, bom, transactions, events] = await Promise.all([
@@ -24,6 +26,7 @@ export async function GET() {
 }
 
 export async function POST(request:Request) {
+  const denied = await requireApiAccess(true); if (denied) return denied;
   try {
     const payload=await request.json() as Record<string,unknown>&{entity?:DetailEntity};
     const db=getDb();
@@ -61,6 +64,7 @@ export async function POST(request:Request) {
 }
 
 export async function DELETE(request:Request) {
+  const denied = await requireApiAccess(true); if (denied) return denied;
   try {
     const url=new URL(request.url); const entity=url.searchParams.get("entity") as DetailEntity|null; const id=Number(url.searchParams.get("id"));
     if(!entity||!id) return Response.json({error:"缺少记录标识"},{status:400});

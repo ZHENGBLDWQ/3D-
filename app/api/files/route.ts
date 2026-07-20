@@ -1,11 +1,13 @@
 import { desc, eq } from "drizzle-orm";
 import { getDb, getFilesBucket } from "../../../db";
 import { printFiles, printItems } from "../../../db/schema";
+import { requireApiAccess } from "../../api-auth";
 
 const allowedExtensions=new Set(["stl","3mf","gcode","gco","png","jpg","jpeg","webp"]);
 const maxBytes=100*1024*1024;
 
 export async function GET(request:Request){
+  const denied=await requireApiAccess();if(denied)return denied;
   try{
     const url=new URL(request.url);const downloadId=Number(url.searchParams.get("download"));const db=getDb();
     if(downloadId){
@@ -19,6 +21,7 @@ export async function GET(request:Request){
 }
 
 export async function POST(request:Request){
+  const denied=await requireApiAccess(true);if(denied)return denied;
   try{
     const form=await request.formData();const upload=form.get("file");if(!(upload instanceof File))return Response.json({error:"请选择文件"},{status:400});
     const extension=upload.name.split(".").pop()?.toLowerCase()||"";if(!allowedExtensions.has(extension))return Response.json({error:"仅支持 STL、3MF、G-code、PNG、JPG 和 WebP"},{status:400});if(upload.size>maxBytes)return Response.json({error:"单个文件不能超过 100MB"},{status:400});
@@ -32,5 +35,6 @@ export async function POST(request:Request){
 }
 
 export async function DELETE(request:Request){
+  const denied=await requireApiAccess(true);if(denied)return denied;
   try{const id=Number(new URL(request.url).searchParams.get("id"));if(!id)return Response.json({error:"缺少文件标识"},{status:400});const db=getDb();const [meta]=await db.select().from(printFiles).where(eq(printFiles.id,id)).limit(1);if(!meta)return Response.json({error:"文件不存在"},{status:404});await getFilesBucket().delete(meta.objectKey);await db.delete(printFiles).where(eq(printFiles.id,id));return Response.json({ok:true});}catch(error){return Response.json({error:error instanceof Error?error.message:"删除失败"},{status:500});}
 }

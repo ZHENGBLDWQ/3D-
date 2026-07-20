@@ -1,6 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 import { getD1, getDb } from "../../../db";
 import { materialBatches, orders, printItems, printJobs } from "../../../db/schema";
+import { requireApiAccess } from "../../api-auth";
 
 type Entity = "item" | "material" | "order" | "job";
 
@@ -33,6 +34,7 @@ async function seedIfEmpty() {
 }
 
 export async function GET() {
+  const denied = await requireApiAccess(); if (denied) return denied;
   try {
     await seedIfEmpty();
     const db = getDb();
@@ -64,6 +66,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const denied = await requireApiAccess(true); if (denied) return denied;
   try {
     const payload = await request.json() as Record<string, unknown> & { entity?: Entity };
     const db = getDb();
@@ -96,6 +99,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const denied = await requireApiAccess(true); if (denied) return denied;
   try {
     const payload = await request.json() as { entity?: Entity; id?: number; status?: string; progress?: number; action?:string; note?:string };
     if (!payload.id || !payload.entity) return Response.json({ error: "缺少记录标识" }, { status: 400 });
@@ -148,6 +152,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const denied = await requireApiAccess(true); if (denied) return denied;
   try {
     const url = new URL(request.url);
     const entity = url.searchParams.get("entity") as Entity | null;
