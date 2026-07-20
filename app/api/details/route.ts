@@ -1,21 +1,23 @@
 import { desc, eq } from "drizzle-orm";
 import { getD1, getDb } from "../../../db";
-import { inventoryTransactions, itemMaterials, materialBatches, orderItems, orders, printItems } from "../../../db/schema";
+import { inventoryTransactions, itemMaterials, materialBatches, orderItems, orders, printItems, printJobEvents, printJobs } from "../../../db/schema";
 
 type DetailEntity = "orderLine" | "bom" | "transaction";
 
 export async function GET() {
   try {
     const db = getDb();
-    const [lines, bom, transactions] = await Promise.all([
+    const [lines, bom, transactions, events] = await Promise.all([
       db.select({ id:orderItems.id, orderId:orderItems.orderId, orderNo:orders.orderNo, itemId:orderItems.itemId, itemName:printItems.name, quantity:orderItems.quantity, unitPrice:orderItems.unitPrice })
         .from(orderItems).innerJoin(orders,eq(orderItems.orderId,orders.id)).innerJoin(printItems,eq(orderItems.itemId,printItems.id)).orderBy(desc(orderItems.createdAt)),
       db.select({ id:itemMaterials.id, itemId:itemMaterials.itemId, itemName:printItems.name, batchId:itemMaterials.batchId, material:materialBatches.material, color:materialBatches.color, gramsPerItem:itemMaterials.gramsPerItem, wastePercent:itemMaterials.wastePercent })
         .from(itemMaterials).innerJoin(printItems,eq(itemMaterials.itemId,printItems.id)).innerJoin(materialBatches,eq(itemMaterials.batchId,materialBatches.id)).orderBy(desc(itemMaterials.createdAt)),
       db.select({ id:inventoryTransactions.id, batchId:inventoryTransactions.batchId, material:materialBatches.material, color:materialBatches.color, type:inventoryTransactions.type, grams:inventoryTransactions.grams, note:inventoryTransactions.note, createdAt:inventoryTransactions.createdAt })
         .from(inventoryTransactions).innerJoin(materialBatches,eq(inventoryTransactions.batchId,materialBatches.id)).orderBy(desc(inventoryTransactions.createdAt)).limit(100),
+      db.select({ id:printJobEvents.id, jobNo:printJobs.jobNo, action:printJobEvents.action, fromStatus:printJobEvents.fromStatus, toStatus:printJobEvents.toStatus, note:printJobEvents.note, createdAt:printJobEvents.createdAt })
+        .from(printJobEvents).innerJoin(printJobs,eq(printJobEvents.jobId,printJobs.id)).orderBy(desc(printJobEvents.createdAt)).limit(100),
     ]);
-    return Response.json({ lines, bom, transactions });
+    return Response.json({ lines, bom, transactions, events });
   } catch (error) {
     return Response.json({ error:error instanceof Error?error.message:"读取明细失败" },{status:500});
   }

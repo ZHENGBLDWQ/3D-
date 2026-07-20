@@ -7,7 +7,7 @@ type Entity = "item" | "material" | "order" | "job";
 type Item = { id:number; sku:string; name:string; category:string; estimatedGrams:number; estimatedMinutes:number };
 type Material = { id:number; material:string; color:string; brand:string; initialGrams:number; remainingGrams:number; lowStockGrams:number };
 type Order = { id:number; orderNo:string; customer:string; status:string; dueAt:string|null };
-type Job = { id:number; jobNo:string; itemId:number|null; itemName:string|null; orderId:number|null; printerName:string; status:string; progress:number };
+type Job = { id:number; jobNo:string; itemId:number|null; itemName:string|null; orderId:number|null; printerName:string; status:string; progress:number; quantity:number; priority:number; materialDeducted:boolean; startedAt:string|null; completedAt:string|null };
 type WorkspaceData = { items:Item[]; materials:Material[]; orders:Order[]; jobs:Job[] };
 
 const nav: { label:Section; mark:string }[] = [
@@ -51,11 +51,12 @@ export default function Home() {
     const response = await fetch(`/api/workspace?entity=${entity}&id=${id}`, { method:"DELETE" });
     if (response.ok) { toast("记录已删除"); await loadData(); } else toast("删除失败：记录可能正在被其他数据使用");
   }
-  async function advanceJob(job:Job) {
-    const next = job.status === "排队" ? { status:"打印中", progress:5 } : job.status === "打印中" ? { status:"已完成", progress:100 } : { status:"排队", progress:0 };
-    const response = await fetch("/api/workspace", { method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ entity:"job", id:job.id, ...next }) });
-    if (response.ok) { toast(`任务已更新为${next.status}`); await loadData(); }
+  async function runJobAction(job:Job,action:string) {
+    const response = await fetch("/api/workspace", { method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ entity:"job", id:job.id, action }) });
+    const result=await response.json();
+    if (response.ok) { toast(`任务已更新为${result.status}`); await loadData(); } else toast(result.error||"任务操作失败");
   }
+  async function advanceJob(job:Job){const action=job.status==="排队"?"start":job.status==="打印中"||job.status==="已暂停"?"complete":"retry";await runJobAction(job,action);}
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
@@ -82,7 +83,7 @@ export default function Home() {
       <header className="topbar"><div><p>生产控制台</p><h1>{section}</h1></div><div className="top-actions"><label className="search"><span>⌕</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索当前数据"/></label><button className="icon-btn" aria-label="通知">♢<i/></button>{section!=="生产明细"&&<button className="primary" onClick={openCreate}>＋ 新建{section==="概览"?"任务":section}</button>}</div></header>
       <div className="workspace">
         <div className="date-row"><div><span className="live-dot"/> {loading?"正在读取生产数据":"实时生产数据"}</div><time>2026年7月20日 · 星期一</time></div>
-        {section === "概览" ? <Dashboard data={data} metrics={{printing,waiting,completed,alerts}} onNavigate={setSection} onAdvance={advanceJob}/> : section === "生产明细" ? <ProductionDetails data={data} toast={toast} onWorkspaceChanged={loadData}/> : <Management section={section} filtered={filtered} onDelete={remove} onAdvance={advanceJob}/>}
+        {section === "概览" ? <Dashboard data={data} metrics={{printing,waiting,completed,alerts}} onNavigate={setSection} onAdvance={advanceJob}/> : section === "生产明细" ? <ProductionDetails data={data} toast={toast} onWorkspaceChanged={loadData}/> : <Management section={section} filtered={filtered} onDelete={remove} onAction={runJobAction}/>}
       </div>
     </section>
     {modal ? <CreateModal entity={modal} data={data} onClose={() => setModal(null)} onSaved={async () => { setModal(null); toast("记录已保存"); await loadData(); }}/> : null}
@@ -101,12 +102,12 @@ function Dashboard({data,metrics,onNavigate,onAdvance}:{data:WorkspaceData;metri
   </>;
 }
 
-function Management({section,filtered,onDelete,onAdvance}:{section:"打印物品"|"耗材库存"|"订单"|"打印队列";filtered:{items:Item[];materials:Material[];orders:Order[];jobs:Job[]};onDelete:(e:Entity,id:number)=>void;onAdvance:(j:Job)=>void}) {
+function Management({section,filtered,onDelete,onAction}:{section:"打印物品"|"耗材库存"|"订单"|"打印队列";filtered:{items:Item[];materials:Material[];orders:Order[];jobs:Job[]};onDelete:(e:Entity,id:number)=>void;onAction:(j:Job,a:string)=>void}) {
   const configs = {
     "打印物品": { eyebrow:"ITEM LIBRARY", note:"维护可打印产品及其预计用料、工时", heads:["SKU","物品名称","分类","预计用料","预计工时","操作"], rows:filtered.items.map(x=>[x.sku,x.name,x.category,`${x.estimatedGrams} g`,`${x.estimatedMinutes} 分钟`,<button className="danger-link" key="d" onClick={()=>onDelete("item",x.id)}>删除</button>]) },
     "耗材库存": { eyebrow:"MATERIAL BATCHES", note:"按卷材批次跟踪初始重量、余量与预警线", heads:["材料","颜色","品牌","当前余量","预警线","操作"], rows:filtered.materials.map(x=>[x.material,x.color,x.brand||"—",`${x.remainingGrams} / ${x.initialGrams} g`,`${x.lowStockGrams} g`,<button className="danger-link" key="d" onClick={()=>onDelete("material",x.id)}>删除</button>]) },
     "订单": { eyebrow:"CUSTOMER ORDERS", note:"跟踪客户需求、交期和生产状态", heads:["订单编号","客户","交付日期","状态","操作"], rows:filtered.orders.map(x=>[x.orderNo,x.customer,x.dueAt||"未设置",<span className="order-state blue" key="s">{x.status}</span>,<button className="danger-link" key="d" onClick={()=>onDelete("order",x.id)}>删除</button>]) },
-    "打印队列": { eyebrow:"PRINT JOBS", note:"管理任务优先顺序与生产进度", heads:["任务编号","打印物品","打印机","进度","状态","操作"], rows:filtered.jobs.map(x=>[x.jobNo,x.itemName||"未关联",x.printerName,`${x.progress}%`,<span className={`badge ${x.status==="排队"?"waiting":"printing"}`} key="s">{x.status}</span>,<div className="row-actions" key="a"><button onClick={()=>onAdvance(x)}>推进</button><button className="danger-link" onClick={()=>onDelete("job",x.id)}>删除</button></div>]) },
+    "打印队列": { eyebrow:"PRINT JOBS", note:"管理排队、开始、暂停、完成、失败与重打；完成时按 BOM 自动扣料", heads:["任务编号","打印物品","打印机","数量/优先级","进度","状态","生产操作"], rows:filtered.jobs.map(x=>[x.jobNo,x.itemName||"未关联",x.printerName,`${x.quantity} 件 / P${x.priority}`,`${x.progress}%`,<span className={`badge ${x.status==="排队"?"waiting":"printing"}`} key="s">{x.status}</span>,<JobActions key="a" job={x} onAction={onAction} onDelete={()=>onDelete("job",x.id)}/>]) },
   } as const;
   const config = configs[section];
   return <section className="panel management"><div className="management-hero"><small>{config.eyebrow}</small><h2>{section}</h2><p>{config.note}</p></div><DataTable heads={[...config.heads]} rows={[...config.rows]}/>{config.rows.length===0&&<div className="empty-state">没有匹配的记录，请新建一条数据。</div>}</section>;
@@ -116,31 +117,44 @@ type DetailData={
   lines:{id:number;orderNo:string;itemName:string;quantity:number;unitPrice:number}[];
   bom:{id:number;itemName:string;material:string;color:string;gramsPerItem:number;wastePercent:number}[];
   transactions:{id:number;material:string;color:string;type:string;grams:number;note:string;createdAt:string}[];
+  events:{id:number;jobNo:string;action:string;fromStatus:string;toStatus:string;note:string;createdAt:string}[];
 };
 
 function ProductionDetails({data,toast,onWorkspaceChanged}:{data:WorkspaceData;toast:(m:string)=>void;onWorkspaceChanged:()=>Promise<void>}) {
-  const [details,setDetails]=useState<DetailData>({lines:[],bom:[],transactions:[]});
-  const [tab,setTab]=useState<"orderLine"|"bom"|"transaction">("orderLine");
+  const [details,setDetails]=useState<DetailData>({lines:[],bom:[],transactions:[],events:[]});
+  const [tab,setTab]=useState<"orderLine"|"bom"|"transaction"|"events">("orderLine");
   const [busy,setBusy]=useState(false);
   async function load(){const response=await fetch("/api/details",{cache:"no-store"});const result=await response.json();if(response.ok)setDetails(result);else toast("明细读取失败");}
   useEffect(()=>{fetch("/api/details",{cache:"no-store"}).then(r=>r.json().then(v=>({ok:r.ok,v}))).then(({ok,v})=>{if(ok)setDetails(v);}).catch(()=>undefined);},[]);
   async function submit(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy(true);const values=Object.fromEntries(new FormData(event.currentTarget));const response=await fetch("/api/details",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({entity:tab,...values})});const result=await response.json();setBusy(false);if(!response.ok){toast(result.error||"保存失败");return;}event.currentTarget.reset();toast("生产明细已保存");await Promise.all([load(),onWorkspaceChanged()]);}
   async function remove(entity:"orderLine"|"bom",id:number){const response=await fetch(`/api/details?entity=${entity}&id=${id}`,{method:"DELETE"});if(response.ok){toast("明细已删除");await load();}else toast("删除失败");}
   return <section className="details-layout">
-    <div className="panel detail-entry"><div className="management-hero"><small>PRODUCTION DETAILS</small><h2>业务明细</h2><p>建立订单、物品配方与库存变动之间的可追溯关系</p></div><div className="detail-tabs"><button className={tab==="orderLine"?"active":""} onClick={()=>setTab("orderLine")}>订单行</button><button className={tab==="bom"?"active":""} onClick={()=>setTab("bom")}>物品 BOM</button><button className={tab==="transaction"?"active":""} onClick={()=>setTab("transaction")}>库存流水</button></div>
+    <div className="panel detail-entry"><div className="management-hero"><small>PRODUCTION DETAILS</small><h2>业务明细</h2><p>建立订单、物品配方与库存变动之间的可追溯关系</p></div><div className="detail-tabs"><button className={tab==="orderLine"?"active":""} onClick={()=>setTab("orderLine")}>订单行</button><button className={tab==="bom"?"active":""} onClick={()=>setTab("bom")}>物品 BOM</button><button className={tab==="transaction"?"active":""} onClick={()=>setTab("transaction")}>库存流水</button><button className={tab==="events"?"active":""} onClick={()=>setTab("events")}>任务事件</button></div>
       <form className="detail-form" onSubmit={submit}>
         {tab==="orderLine"&&<><label><span>客户订单</span><select name="orderId" required><option value="">请选择</option>{data.orders.map(x=><option value={x.id} key={x.id}>{x.orderNo} · {x.customer}</option>)}</select></label><label><span>打印物品</span><select name="itemId" required><option value="">请选择</option>{data.items.map(x=><option value={x.id} key={x.id}>{x.sku} · {x.name}</option>)}</select></label><Field name="quantity" label="订购数量" type="number" defaultValue="1"/><Field name="unitPrice" label="单价（元）" type="number" defaultValue="0"/></>}
         {tab==="bom"&&<><label><span>打印物品</span><select name="itemId" required><option value="">请选择</option>{data.items.map(x=><option value={x.id} key={x.id}>{x.name}</option>)}</select></label><label><span>耗材批次</span><select name="batchId" required><option value="">请选择</option>{data.materials.map(x=><option value={x.id} key={x.id}>{x.material} {x.color} · {x.brand}</option>)}</select></label><Field name="gramsPerItem" label="单件用料（g）" type="number"/><Field name="wastePercent" label="损耗率（%）" type="number" defaultValue="5"/></>}
         {tab==="transaction"&&<><label><span>耗材批次</span><select name="batchId" required><option value="">请选择</option>{data.materials.map(x=><option value={x.id} key={x.id}>{x.material} {x.color} · 余 {x.remainingGrams}g</option>)}</select></label><label><span>变动类型</span><select name="type"><option>入库</option><option>领用</option><option>退料</option><option>报废</option></select></label><Field name="grams" label="变动克重（g）" type="number"/><Field name="note" label="备注" placeholder="采购入库、样件打印等"/></>}
-        <button className="primary detail-save" disabled={busy}>{busy?"保存中…":"保存明细"}</button>
+        {tab!=="events"&&<button className="primary detail-save" disabled={busy}>{busy?"保存中…":"保存明细"}</button>}
       </form>
     </div>
-    <div className="panel detail-history"><PanelHead eyebrow="TRACEABLE RECORDS" title={tab==="orderLine"?"订单内容":tab==="bom"?"物品用料清单":"库存变动记录"} action="刷新 ↻" onClick={()=>void load()}/>
+    <div className="panel detail-history"><PanelHead eyebrow="TRACEABLE RECORDS" title={tab==="orderLine"?"订单内容":tab==="bom"?"物品用料清单":tab==="transaction"?"库存变动记录":"任务事件记录"} action="刷新 ↻" onClick={()=>void load()}/>
       {tab==="orderLine"?<DataTable heads={["订单","物品","数量","单价","操作"]} rows={details.lines.map(x=>[x.orderNo,x.itemName,String(x.quantity),`¥ ${x.unitPrice.toFixed(2)}`,<button className="danger-link" key="d" onClick={()=>remove("orderLine",x.id)}>删除</button>])}/>:null}
       {tab==="bom"?<DataTable heads={["物品","耗材","单件克重","损耗","操作"]} rows={details.bom.map(x=>[x.itemName,`${x.material} ${x.color}`,`${x.gramsPerItem} g`,`${x.wastePercent}%`,<button className="danger-link" key="d" onClick={()=>remove("bom",x.id)}>删除</button>])}/>:null}
       {tab==="transaction"?<DataTable heads={["耗材","类型","变动","备注","时间"]} rows={details.transactions.map(x=>[`${x.material} ${x.color}`,x.type,`${x.grams>0?"+":""}${x.grams} g`,x.note||"—",x.createdAt])}/>:null}
+      {tab==="events"?<DataTable heads={["任务","操作","状态变化","备注","时间"]} rows={details.events.map(x=>[x.jobNo,x.action,`${x.fromStatus} → ${x.toStatus}`,x.note||"—",x.createdAt])}/>:null}
     </div>
   </section>;
+}
+
+function JobActions({job,onAction,onDelete}:{job:Job;onAction:(j:Job,a:string)=>void;onDelete:()=>void}) {
+  const actions:Record<string,{key:string;label:string}[]>={
+    "排队":[{key:"start",label:"开始"},{key:"cancel",label:"取消"}],
+    "打印中":[{key:"pause",label:"暂停"},{key:"complete",label:"完成"},{key:"fail",label:"失败"}],
+    "已暂停":[{key:"resume",label:"继续"},{key:"complete",label:"完成"},{key:"fail",label:"失败"}],
+    "失败":[{key:"retry",label:"重打"}],
+    "已取消":[{key:"retry",label:"重新排队"}],
+  };
+  return <div className="row-actions job-actions">{(actions[job.status]||[]).map(a=><button key={a.key} onClick={()=>onAction(job,a.key)}>{a.label}</button>)}{!["打印中","已暂停"].includes(job.status)&&<button className="danger-link" onClick={onDelete}>删除</button>}</div>;
 }
 
 function CreateModal({entity,data,onClose,onSaved}:{entity:Entity;data:WorkspaceData;onClose:()=>void;onSaved:()=>void}) {
@@ -151,7 +165,7 @@ function CreateModal({entity,data,onClose,onSaved}:{entity:Entity;data:Workspace
     {entity==="item"&&<><Field name="sku" label="SKU" placeholder="ITEM-004"/><Field name="name" label="物品名称" placeholder="例如：传感器支架"/><Field name="category" label="分类" placeholder="机械零件"/><Field name="estimatedGrams" label="预计用料（g）" type="number"/><Field name="estimatedMinutes" label="预计工时（分钟）" type="number"/></>}
     {entity==="material"&&<><Field name="material" label="材料类型" placeholder="PLA"/><Field name="color" label="颜色" placeholder="哑光白"/><Field name="brand" label="品牌" placeholder="eSUN"/><Field name="initialGrams" label="初始重量（g）" type="number" defaultValue="1000"/><Field name="remainingGrams" label="当前余量（g）" type="number" defaultValue="1000"/><Field name="lowStockGrams" label="预警线（g）" type="number" defaultValue="200"/></>}
     {entity==="order"&&<><Field name="orderNo" label="订单编号" placeholder="ORD-0271"/><Field name="customer" label="客户名称" placeholder="客户或公司"/><Field name="dueAt" label="交付日期" type="date"/><label><span>订单状态</span><select name="status"><option>待确认</option><option>待打印</option><option>生产中</option><option>已完成</option></select></label></>}
-    {entity==="job"&&<><Field name="jobNo" label="任务编号" placeholder="JOB-045"/><Field name="printerName" label="打印机" placeholder="Bambu X1C"/><label><span>打印物品</span><select name="itemId"><option value="">暂不关联</option>{data.items.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label><span>关联订单</span><select name="orderId"><option value="">暂不关联</option>{data.orders.map(x=><option key={x.id} value={x.id}>{x.orderNo} · {x.customer}</option>)}</select></label><label><span>状态</span><select name="status"><option>排队</option><option>打印中</option><option>已完成</option></select></label></>}
+    {entity==="job"&&<><Field name="jobNo" label="任务编号" placeholder="JOB-045"/><Field name="printerName" label="打印机" placeholder="Bambu X1C"/><label><span>打印物品</span><select name="itemId"><option value="">暂不关联</option>{data.items.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label><span>关联订单</span><select name="orderId"><option value="">暂不关联</option>{data.orders.map(x=><option key={x.id} value={x.id}>{x.orderNo} · {x.customer}</option>)}</select></label><Field name="quantity" label="打印数量" type="number" defaultValue="1"/><label><span>优先级</span><select name="priority" defaultValue="3"><option value="1">P1 · 紧急</option><option value="2">P2 · 高</option><option value="3">P3 · 普通</option><option value="4">P4 · 低</option></select></label></>}
   </div>{error&&<p className="form-error">{error}</p>}<div className="modal-actions"><button type="button" onClick={onClose}>取消</button><button className="primary" disabled={saving}>{saving?"保存中…":"保存记录"}</button></div></form></div>;
 }
 

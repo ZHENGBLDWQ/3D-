@@ -39,6 +39,11 @@ export const printJobs = sqliteTable("print_jobs", {
   printerName: text("printer_name").notNull(),
   status: text("status").notNull().default("排队"),
   progress: integer("progress").notNull().default(0),
+  quantity: integer("quantity").notNull().default(1),
+  priority: integer("priority").notNull().default(3),
+  materialDeducted: integer("material_deducted", { mode: "boolean" }).notNull().default(false),
+  startedAt: text("started_at"),
+  completedAt: text("completed_at"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
@@ -67,5 +72,15 @@ export const itemMaterials = sqliteTable("item_materials", {
   batchId: integer("batch_id").notNull().references(() => materialBatches.id),
   gramsPerItem: real("grams_per_item").notNull(),
   wastePercent: real("waste_percent").notNull().default(5),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const printJobEvents = sqliteTable("print_job_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  jobId: integer("job_id").notNull().references(() => printJobs.id),
+  action: text("action").notNull(),
+  fromStatus: text("from_status").notNull(),
+  toStatus: text("to_status").notNull(),
+  note: text("note").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
