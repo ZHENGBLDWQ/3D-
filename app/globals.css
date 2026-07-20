@@ -2286,6 +2286,12 @@ td button {
   padding: 10px 13px;
   cursor: pointer;
 }
+.inventory-toolbar button.primary {
+  border-color: var(--orange);
+  background: var(--orange);
+  color: #fff;
+  box-shadow: 0 5px 14px #f45d2d32;
+}
 .inventory-ledger-panel { overflow: hidden; }
 .inventory-ledger-panel table { min-width: 1280px; }
 .inventory-flow-panel table { min-width: 1100px; }
