@@ -44,3 +44,5 @@ next-env.d.ts
 # Python local caches
 __pycache__/
 *.py[cod]
+credentials.json
+credentials.json.tmp

@@ -15,6 +15,8 @@ import urllib.parse
 import urllib.request
 import uuid
 
+from layertrace_gateway.discovery import BambuDiscovery
+
 CLOUD_URL = os.environ.get("LAYERTRACE_URL", "https://layertrace-3d-print-ops.dongwanqing0.chatgpt.site").rstrip("/")
 TOKEN = os.environ.get("LAYERTRACE_TOKEN", "").strip()
 PRINTER_URL = os.environ.get("PRINTER_URL", "http://127.0.0.1:7125").rstrip("/")
@@ -29,25 +31,12 @@ BAMBU_SERIAL = os.environ.get("BAMBU_SERIAL", "")
 BAMBU_ACCESS_CODE = os.environ.get("BAMBU_ACCESS_CODE", "")
 
 def discover_bambu(timeout=4):
-    message = "\r\n".join(["M-SEARCH * HTTP/1.1","HOST: 239.255.255.250:1900",'MAN: "ssdp:discover"',"MX: 2","ST: urn:bambulab-com:device:3dprinter:1","",""]).encode()
-    found = []
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    sock.settimeout(.5)
-    sock.sendto(message, ("239.255.255.250", 1900))
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try: data, address = sock.recvfrom(8192)
-        except socket.timeout: continue
-        headers = {}
-        for line in data.decode("utf-8", "ignore").splitlines()[1:]:
-            if ":" in line:
-                key, value = line.split(":", 1)
-                headers[key.strip().lower()] = value.strip()
-        serial = headers.get("usn", "").split("::", 1)[0].replace("uuid:", "")
-        found.append({"host":address[0],"serial":serial,"name":headers.get("devname.bambu.com", "Bambu Lab"),"model":headers.get("devmodel.bambu.com", "")})
-    sock.close()
-    unique = {(item["host"], item["serial"]):item for item in found}
-    return list(unique.values())
+    # Compatibility adapter: existing single-printer startup now shares the
+    # gateway's serial-based discovery and DHCP-safe deduplication.
+    return [
+        {"host": item.host, "serial": item.serial, "name": item.name, "model": item.model}
+        for item in BambuDiscovery(timeout=timeout).scan()
+    ]
 
 def mqtt_length(value):
     out = bytearray()
