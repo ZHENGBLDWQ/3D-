@@ -13,8 +13,10 @@ services:
   camera-gateway:
     image: alexxit/go2rtc:latest
     restart: unless-stopped
-    network_mode: host
+    ports:
+      - "1984:1984"
+      - "8555:8555/tcp"
+      - "8555:8555/udp"
     volumes:
       - ./go2rtc.yaml:/config/go2rtc.yaml:ro
-    command: ["-config", "/config/go2rtc.yaml"]
-
+    command: ["go2rtc", "-config", "/config/go2rtc.yaml"]

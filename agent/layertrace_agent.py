@@ -16,7 +16,7 @@ import urllib.request
 import uuid
 
 CLOUD_URL = os.environ.get("LAYERTRACE_URL", "https://layertrace-3d-print-ops.dongwanqing0.chatgpt.site").rstrip("/")
-TOKEN = os.environ["LAYERTRACE_TOKEN"]
+TOKEN = os.environ.get("LAYERTRACE_TOKEN", "").strip()
 PRINTER_URL = os.environ.get("PRINTER_URL", "http://127.0.0.1:7125").rstrip("/")
 CONNECTOR = os.environ.get("PRINTER_CONNECTOR", "moonraker").lower()
 PRINTER_API_KEY = os.environ.get("PRINTER_API_KEY", "")
@@ -301,6 +301,15 @@ def execute_command(command, bambu=None):
 
 def main():
     print(f"LayerTrace agent started: {CONNECTOR} @ {PRINTER_URL}")
+    missing = []
+    if not TOKEN:
+        missing.append("LAYERTRACE_TOKEN")
+    if CONNECTOR == "bambu_lan" and not BAMBU_ACCESS_CODE:
+        missing.append("BAMBU_ACCESS_CODE")
+    if missing:
+        print("等待配置：请在 local-hub/.env 中填写 " + "、".join(missing))
+        while True:
+            time.sleep(3600)
     bambu = None
     if CONNECTOR == "bambu_lan":
         bambu = BambuMqtt(BAMBU_HOST, BAMBU_SERIAL, BAMBU_ACCESS_CODE)
