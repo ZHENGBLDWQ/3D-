@@ -358,6 +358,7 @@ function HomeWorkspace() {
             <p className="nav-title">管理</p>
             <a className="main-nav-link" href="/team" title="员工与权限"><span>♙</span><em>员工与权限</em></a>
             <a className="main-nav-link" href="/fleet" title="打印机中枢"><span>▣</span><em>打印机中枢</em></a>
+            <a className="main-nav-link" href="/models" title="模型资产库"><span>⬡</span><em>模型资产库</em></a>
             <button className={section==="系统中心"?"nav-active":""} aria-current={section==="系统中心"?"page":undefined} title="系统中心" onClick={()=>setSection("系统中心")}><span>⚙</span><em>系统中心</em></button>
           </div>
         </nav>
