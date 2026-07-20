@@ -1906,6 +1906,7 @@ type Printer = {
   status: string;
   totalHours: number;
   hourlyRate: number;
+  powerWatts: number;
   maintenanceDueAt: string | null;
   notes: string;
   connectorType: string;
@@ -1916,6 +1917,17 @@ type Printer = {
   currentFile: string | null;
   remoteProgress: number | null;
   amsSlots?: AmsSlot[];
+};
+const bambuPresets: Record<string, { volume: string; watts: number }> = {
+  "Bambu Lab X1C": { volume: "256 × 256 × 256 mm", watts: 1000 },
+  "Bambu Lab X1E": { volume: "256 × 256 × 256 mm", watts: 1000 },
+  "Bambu Lab P1S": { volume: "256 × 256 × 256 mm", watts: 1000 },
+  "Bambu Lab P1P": { volume: "256 × 256 × 256 mm", watts: 1000 },
+  "Bambu Lab P2S": { volume: "256 × 256 × 256 mm", watts: 1000 },
+  "Bambu Lab A1": { volume: "256 × 256 × 256 mm", watts: 1300 },
+  "Bambu Lab A1 mini": { volume: "180 × 180 × 180 mm", watts: 350 },
+  "Bambu Lab H2D": { volume: "325 × 320 × 325 mm", watts: 2200 },
+  "Bambu Lab H2S": { volume: "340 × 320 × 340 mm", watts: 2000 },
 };
 function PrinterManager({ toast }: { toast: (m: string) => void }) {
   const [printers, setPrinters] = useState<Printer[]>([]);
@@ -2056,11 +2068,40 @@ function PrinterManager({ toast }: { toast: (m: string) => void }) {
           <Field name="name" label="设备名称" placeholder="打印机 01" />
           <label>
             <span>品牌型号</span>
-            <select name="model" defaultValue="Bambu Lab X1C">
-              <optgroup label="X 系列"><option>Bambu Lab X1C</option><option>Bambu Lab X1E</option></optgroup>
-              <optgroup label="P 系列"><option>Bambu Lab P1S</option><option>Bambu Lab P1P</option><option>Bambu Lab P2S</option></optgroup>
-              <optgroup label="A 系列"><option>Bambu Lab A1</option><option>Bambu Lab A1 mini</option></optgroup>
-              <optgroup label="H 系列"><option>Bambu Lab H2D</option><option>Bambu Lab H2S</option></optgroup>
+            <select
+              name="model"
+              defaultValue="Bambu Lab X1C"
+              onChange={(event) => {
+                const preset = bambuPresets[event.currentTarget.value],
+                  form = event.currentTarget.form;
+                if (!preset || !form) return;
+                const volume = form.elements.namedItem(
+                    "buildVolume",
+                  ) as HTMLInputElement | null,
+                  power = form.elements.namedItem(
+                    "powerWatts",
+                  ) as HTMLInputElement | null;
+                if (volume) volume.value = preset.volume;
+                if (power) power.value = String(preset.watts);
+              }}
+            >
+              <optgroup label="X 系列">
+                <option>Bambu Lab X1C</option>
+                <option>Bambu Lab X1E</option>
+              </optgroup>
+              <optgroup label="P 系列">
+                <option>Bambu Lab P1S</option>
+                <option>Bambu Lab P1P</option>
+                <option>Bambu Lab P2S</option>
+              </optgroup>
+              <optgroup label="A 系列">
+                <option>Bambu Lab A1</option>
+                <option>Bambu Lab A1 mini</option>
+              </optgroup>
+              <optgroup label="H 系列">
+                <option>Bambu Lab H2D</option>
+                <option>Bambu Lab H2S</option>
+              </optgroup>
             </select>
           </label>
           <label>
@@ -2082,6 +2123,7 @@ function PrinterManager({ toast }: { toast: (m: string) => void }) {
             name="buildVolume"
             label="成型尺寸"
             placeholder="256 × 256 × 256 mm"
+            defaultValue="256 × 256 × 256 mm"
           />
           <Field
             name="totalHours"
@@ -2094,6 +2136,12 @@ function PrinterManager({ toast }: { toast: (m: string) => void }) {
             label="设备成本（RM/小时）"
             type="number"
             defaultValue="0"
+          />
+          <Field
+            name="powerWatts"
+            label="估算功率（W）"
+            type="number"
+            defaultValue="1000"
           />
           <Field name="maintenanceDueAt" label="下次保养日期" type="date" />
           <Field
@@ -2142,7 +2190,7 @@ function PrinterManager({ toast }: { toast: (m: string) => void }) {
                 </p>
                 <small>
                   {p.location || "未设置位置"}　|　累计 {p.totalHours}h · RM
-                  {p.hourlyRate || 0}/h
+                  {p.hourlyRate || 0}/h · {p.powerWatts || 1000}W
                   {p.nozzleTemp !== null
                     ? `　|　喷嘴 ${p.nozzleTemp.toFixed(1)}℃ / 热床 ${(p.bedTemp || 0).toFixed(1)}℃`
                     : ""}
