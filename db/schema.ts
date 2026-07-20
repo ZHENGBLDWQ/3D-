@@ -132,6 +132,20 @@ export const printers = sqliteTable("printers", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const bambuAmsSlots = sqliteTable("bambu_ams_slots", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  printerId: integer("printer_id").notNull().references(() => printers.id),
+  amsUnit: integer("ams_unit").notNull().default(0),
+  trayIndex: integer("tray_index").notNull(),
+  material: text("material").notNull().default(""),
+  colorHex: text("color_hex").notNull().default(""),
+  remainingPercent: real("remaining_percent"),
+  tagUid: text("tag_uid").notNull().default(""),
+  mappedSpoolExternalId: integer("mapped_spool_external_id"),
+  active: integer("active", { mode: "boolean" }).notNull().default(false),
+  lastSeenAt: text("last_seen_at").notNull(),
+});
+
 export const printerCommands = sqliteTable("printer_commands", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   printerId: integer("printer_id").notNull().references(() => printers.id),

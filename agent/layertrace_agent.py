@@ -1,6 +1,11 @@
 """LayerTrace local printer agent. Python 3.10+, standard library only."""
 import json
 import os
+import socket
+import ssl
+import struct
+import ftplib
+import io
 from pathlib import Path
 import time
 import urllib.error
@@ -17,6 +22,122 @@ INTERVAL = max(5, int(os.environ.get("POLL_INTERVAL", "10")))
 SPOOLMAN_URL = os.environ.get("SPOOLMAN_URL", "").rstrip("/")
 SPOOLMAN_INTERVAL = max(30, int(os.environ.get("SPOOLMAN_INTERVAL", "60")))
 STATE_FILE = Path(os.environ.get("LAYERTRACE_STATE_FILE", Path(__file__).with_name(".layertrace_state.json")))
+BAMBU_HOST = os.environ.get("BAMBU_HOST", "")
+BAMBU_SERIAL = os.environ.get("BAMBU_SERIAL", "")
+BAMBU_ACCESS_CODE = os.environ.get("BAMBU_ACCESS_CODE", "")
+
+def mqtt_length(value):
+    out = bytearray()
+    while True:
+        digit = value % 128
+        value //= 128
+        if value: digit |= 128
+        out.append(digit)
+        if not value: return bytes(out)
+
+def mqtt_string(value):
+    raw = value.encode("utf-8")
+    return struct.pack("!H", len(raw)) + raw
+
+class BambuMqtt:
+    """Minimal MQTT 3.1.1 TLS client for Bambu LAN developer mode."""
+    def __init__(self, host, serial, access_code):
+        if not host or not serial or not access_code:
+            raise ValueError("BAMBU_HOST、BAMBU_SERIAL 和 BAMBU_ACCESS_CODE 必须设置")
+        self.host, self.serial, self.access_code = host, serial, access_code
+        self.sock = None
+        self.last = {}
+
+    def send(self, kind, payload):
+        self.sock.sendall(bytes([kind]) + mqtt_length(len(payload)) + payload)
+
+    def packet(self, timeout=1):
+        self.sock.settimeout(timeout)
+        first = self.sock.recv(1)
+        if not first: raise ConnectionError("Bambu MQTT 连接已关闭")
+        multiplier, length = 1, 0
+        while True:
+            digit = self.sock.recv(1)[0]
+            length += (digit & 127) * multiplier
+            if not digit & 128: break
+            multiplier *= 128
+        data = b""
+        while len(data) < length: data += self.sock.recv(length - len(data))
+        return first[0], data
+
+    def connect(self):
+        raw = socket.create_connection((self.host, 8883), timeout=8)
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        self.sock = context.wrap_socket(raw, server_hostname=self.host)
+        variable = mqtt_string("MQTT") + bytes([4, 0xC2]) + struct.pack("!H", 30)
+        payload = mqtt_string("layertrace-" + uuid.uuid4().hex[:12]) + mqtt_string("bblp") + mqtt_string(self.access_code)
+        self.send(0x10, variable + payload)
+        kind, response = self.packet(8)
+        if kind != 0x20 or len(response) < 2 or response[1] != 0:
+            raise ConnectionError("Bambu MQTT 认证失败，请检查 LAN Access Code 与 Developer Mode")
+        topic = f"device/{self.serial}/report"
+        self.send(0x82, struct.pack("!H", 1) + mqtt_string(topic) + b"\x00")
+        self.packet(8)
+        self.publish({"pushing": {"sequence_id": "0", "command": "pushall"}})
+
+    def publish(self, value):
+        topic = mqtt_string(f"device/{self.serial}/request")
+        self.send(0x30, topic + json.dumps(value, separators=(",", ":")).encode())
+
+    def poll(self):
+        deadline = time.time() + 2
+        while time.time() < deadline:
+            try: kind, data = self.packet(max(.1, deadline - time.time()))
+            except socket.timeout: break
+            if kind >> 4 == 3 and len(data) > 2:
+                topic_length = struct.unpack("!H", data[:2])[0]
+                try: message = json.loads(data[2 + topic_length:].decode("utf-8"))
+                except (ValueError, UnicodeDecodeError): continue
+                if isinstance(message.get("print"), dict): self.last.update(message["print"])
+        return self.last
+
+class ImplicitFTP_TLS(ftplib.FTP_TLS):
+    def connect(self, host="", port=0, timeout=-999, source_address=None):
+        if host: self.host = host
+        if port: self.port = port
+        self.sock = socket.create_connection((self.host, self.port), self.timeout if timeout == -999 else timeout, source_address)
+        self.af = self.sock.family
+        self.sock = self.context.wrap_socket(self.sock, server_hostname=self.host)
+        self.file = self.sock.makefile("r", encoding=self.encoding)
+        self.welcome = self.getresp()
+        return self.welcome
+
+def bambu_status(client):
+    p = client.poll()
+    state = str(p.get("gcode_state", "online")).lower()
+    mapped = {"running":"printing", "pause":"paused", "failed":"error", "finish":"online", "idle":"online"}.get(state, state)
+    active_tray = str(p.get("tray_now", ""))
+    slots = []
+    ams = p.get("ams") or {}
+    for unit in ams.get("ams", []) or []:
+        unit_id = int(unit.get("id", 0))
+        for tray in unit.get("tray", []) or []:
+            tray_id = int(tray.get("id", 0))
+            global_id = str(unit_id * 4 + tray_id)
+            slots.append({"unit":unit_id,"tray":tray_id,"material":tray.get("tray_type") or "","colorHex":str(tray.get("tray_color") or "").lstrip("#")[:8],"remainingPercent":tray.get("remain"),"tagUid":tray.get("tag_uid") or "","active":active_tray in (global_id, str(tray_id))})
+    virtual = ams.get("vt_tray")
+    if isinstance(virtual, dict) and virtual.get("tray_type"):
+        slots.append({"unit":255,"tray":0,"material":virtual.get("tray_type") or "","colorHex":str(virtual.get("tray_color") or "").lstrip("#")[:8],"remainingPercent":virtual.get("remain"),"tagUid":virtual.get("tag_uid") or "","active":active_tray in ("254","255")})
+    return {"state":mapped,"nozzleTemp":p.get("nozzle_temper"),"bedTemp":p.get("bed_temper"),"filename":p.get("subtask_name") or p.get("gcode_file"),"progress":p.get("mc_percent"),"ams":slots,"bambu":{"remainingMinutes":p.get("mc_remaining_time"),"layer":p.get("layer_num"),"totalLayers":p.get("total_layer_num"),"hms":p.get("hms") or [],"wifiSignal":p.get("wifi_signal")}}
+
+def bambu_upload_and_start(client, filename, content, plate_index=0):
+    ftp = ImplicitFTP_TLS(timeout=30)
+    ftp.context.check_hostname = False
+    ftp.context.verify_mode = ssl.CERT_NONE
+    ftp.connect(BAMBU_HOST, 990)
+    ftp.login("bblp", BAMBU_ACCESS_CODE)
+    ftp.prot_p()
+    remote = f"cache/{filename}"
+    ftp.storbinary(f"STOR {remote}", io.BytesIO(content))
+    ftp.quit()
+    client.publish({"print":{"sequence_id":"0","command":"project_file","param":f"Metadata/plate_{plate_index + 1}.gcode","subtask_name":filename,"plate_idx":plate_index,"url":f"file:///sdcard/{remote}","timelapse":False,"bed_leveling":True,"flow_cali":False,"vibration_cali":True,"layer_inspect":False,"use_ams":True}})
 
 def request_json(url, method="GET", data=None, headers=None):
     body = json.dumps(data).encode() if data is not None else None
@@ -91,19 +212,23 @@ def track_spool_usage(payload, spool_id):
 def report(payload):
     return request_json(f"{CLOUD_URL}/api/agent", "POST", payload, {"Authorization": f"Bearer {TOKEN}"})
 
-def execute_command(command):
+def execute_command(command, bambu=None):
     name = command["name"]
     if name == "start":
         payload = command.get("payload", {})
         filename = os.path.basename(payload["filename"])
         content = download_file(payload["fileId"], command["id"])
-        if CONNECTOR == "moonraker":
+        if CONNECTOR == "bambu_lan":
+            bambu_upload_and_start(bambu, filename, content, int(payload.get("plateIndex", 0)))
+        elif CONNECTOR == "moonraker":
             upload_file(f"{PRINTER_URL}/server/files/upload", filename, content)
             request_json(f"{PRINTER_URL}/printer/print/start?filename={urllib.parse.quote(filename)}", "POST")
         else:
             upload_file(f"{PRINTER_URL}/api/files/local", filename, content, {"select": "true", "print": "true"}, {"X-Api-Key": PRINTER_API_KEY})
         return
-    if CONNECTOR == "moonraker":
+    if CONNECTOR == "bambu_lan":
+        bambu.publish({"print":{"sequence_id":"0","command":"stop" if name == "cancel" else name}})
+    elif CONNECTOR == "moonraker":
         request_json(f"{PRINTER_URL}/printer/print/{name}", "POST")
     else:
         headers = {"X-Api-Key": PRINTER_API_KEY}
@@ -112,10 +237,15 @@ def execute_command(command):
 
 def main():
     print(f"LayerTrace agent started: {CONNECTOR} @ {PRINTER_URL}")
+    bambu = None
+    if CONNECTOR == "bambu_lan":
+        bambu = BambuMqtt(BAMBU_HOST, BAMBU_SERIAL, BAMBU_ACCESS_CODE)
+        bambu.connect()
+        print(f"Bambu LAN connected: {BAMBU_HOST} / {BAMBU_SERIAL}")
     last_spool_sync = 0
     while True:
         try:
-            payload = moonraker_status() if CONNECTOR == "moonraker" else octoprint_status()
+            payload = moonraker_status() if CONNECTOR == "moonraker" else bambu_status(bambu) if CONNECTOR == "bambu_lan" else octoprint_status()
             if SPOOLMAN_URL and time.time() - last_spool_sync >= SPOOLMAN_INTERVAL:
                 try:
                     payload["spools"] = spoolman_spools()
@@ -131,14 +261,20 @@ def main():
             command = result.get("command")
             if command:
                 try:
-                    execute_command(command)
+                    execute_command(command, bambu)
                     report({**payload, "ack": {"id": command["id"], "ok": True, "result": "本地代理执行成功"}})
                     print(time.strftime("%F %T"), "command completed:", command["name"])
                 except (urllib.error.URLError, ValueError, TimeoutError) as command_error:
                     report({**payload, "ack": {"id": command["id"], "ok": False, "result": str(command_error)}})
                     print(time.strftime("%F %T"), "command failed:", command_error)
-        except (urllib.error.URLError, KeyError, ValueError, TimeoutError) as error:
+        except (urllib.error.URLError, KeyError, ValueError, TimeoutError, OSError, ConnectionError) as error:
             print(time.strftime("%F %T"), "sync failed:", error)
+            if CONNECTOR == "bambu_lan":
+                try:
+                    bambu = BambuMqtt(BAMBU_HOST, BAMBU_SERIAL, BAMBU_ACCESS_CODE)
+                    bambu.connect()
+                except (OSError, ConnectionError, ValueError) as reconnect_error:
+                    print(time.strftime("%F %T"), "Bambu reconnect failed:", reconnect_error)
         time.sleep(INTERVAL)
 
 if __name__ == "__main__":
