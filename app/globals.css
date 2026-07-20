@@ -2231,3 +2231,89 @@ td button {
   vertical-align: middle;
 }
 .external-job-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin-top:13px}.external-job-card{padding:22px}.external-job-card header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;border-bottom:1px solid var(--line);padding-bottom:16px}.external-job-card header small{color:#8a9691;font-size:8px;letter-spacing:1px}.external-job-card h3{margin:6px 0 0;font-size:15px;overflow-wrap:anywhere}.external-job-card header>b{border-radius:99px;padding:5px 9px;font-size:8px}.external-job-card dl{display:grid;grid-template-columns:1fr 1fr;margin:14px 0}.external-job-card dl>div{padding:9px;border-bottom:1px solid #edf0ee}.external-job-card dt{font-size:8px;color:#8a9691}.external-job-card dd{margin:4px 0 0;font-size:10px;font-weight:700}.external-job-card form{display:grid;grid-template-columns:1fr 1fr;gap:11px}.external-job-card form label{display:grid;gap:6px}.external-job-card form label>span{font-size:9px;color:#64716c;font-weight:700}.external-job-card form select,.external-job-card form input{height:39px;border:1px solid #dce2df;border-radius:7px;background:#fafbf9;padding:0 9px;font-size:10px;min-width:0}.external-job-card form button{grid-column:1/-1}.claimed-summary{display:grid;gap:5px;padding:15px;border-radius:8px;background:#edf7f2}.claimed-summary strong{color:#246c50}.claimed-summary span{font-size:9px;color:#6c7b75}@media(max-width:950px){.external-job-grid{grid-template-columns:1fr}}
+.inventory-center {
+  display: grid;
+  gap: 20px;
+}
+.inventory-kpis {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+.inventory-kpis article {
+  min-height: 118px;
+  padding: 20px;
+  border: 1px solid #e1e5e2;
+  border-radius: 16px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.inventory-kpis small,
+.inventory-toolbar small {
+  color: #8a9590;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+}
+.inventory-kpis strong {
+  color: #18231f;
+  font-family: Georgia, serif;
+  font-size: 28px;
+}
+.inventory-kpis span { color: #83908a; font-size: 12px; }
+.inventory-kpi-alert { border-color: #f3c7c5 !important; background: #fff8f7 !important; }
+.inventory-kpi-alert strong { color: #d84a45; }
+.inventory-toolbar {
+  padding: 22px 26px;
+  border: 1px solid #e1e5e2;
+  border-radius: 16px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.inventory-toolbar h2 { margin: 5px 0; font-size: 24px; }
+.inventory-toolbar p { margin: 0; color: #7d8983; }
+.inventory-toolbar > div:last-child { display: flex; gap: 10px; }
+.inventory-toolbar button,
+.inventory-ledger-panel button {
+  border: 1px solid #d9dfdc;
+  border-radius: 9px;
+  background: #fff;
+  padding: 10px 13px;
+  cursor: pointer;
+}
+.inventory-ledger-panel { overflow: hidden; }
+.inventory-ledger-panel table { min-width: 1280px; }
+.inventory-flow-panel table { min-width: 1100px; }
+.inventory-low-row { background: #fff9f7; }
+.inventory-quantity { display: flex; flex-direction: column; gap: 3px; }
+.inventory-quantity strong { color: #1c2924; }
+.inventory-quantity small { color: #89948f; }
+.inventory-status {
+  display: inline-flex;
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: #248462;
+  background: #eaf7f1;
+  font-size: 12px;
+  font-weight: 700;
+}
+.inventory-status.low { color: #c9433e; background: #fff0ee; }
+.flow-type { display: inline-flex; padding: 4px 8px; border-radius: 7px; font-size: 12px; font-weight: 700; }
+.flow-type.in { color: #20795a; background: #e9f7f0; }
+.flow-type.out { color: #ba443f; background: #fff0ee; }
+.flow-in { color: #238260; font-weight: 800; }
+.flow-out { color: #c34842; font-weight: 800; }
+.inventory-modal { width: min(860px, calc(100vw - 36px)); max-height: calc(100vh - 54px); overflow: auto; }
+@media (max-width: 1300px) {
+  .inventory-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .inventory-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inventory-toolbar { align-items: flex-start; flex-direction: column; }
+  .inventory-toolbar > div:last-child { width: 100%; flex-wrap: wrap; }
+}

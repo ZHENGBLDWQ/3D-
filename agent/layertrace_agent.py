@@ -142,16 +142,22 @@ def bambu_status(client):
     mapped = {"running":"printing", "pause":"paused", "failed":"error", "finish":"online", "idle":"online"}.get(state, state)
     active_tray = str(p.get("tray_now", ""))
     slots = []
+    def remaining_percent(value):
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return round(max(0.0, min(100.0, number)), 1) if number >= 0 else None
     ams = p.get("ams") or {}
     for unit in ams.get("ams", []) or []:
         unit_id = int(unit.get("id", 0))
         for tray in unit.get("tray", []) or []:
             tray_id = int(tray.get("id", 0))
             global_id = str(unit_id * 4 + tray_id)
-            slots.append({"unit":unit_id,"tray":tray_id,"material":tray.get("tray_type") or "","colorHex":str(tray.get("tray_color") or "").lstrip("#")[:8],"remainingPercent":tray.get("remain"),"tagUid":tray.get("tag_uid") or "","active":active_tray in (global_id, str(tray_id))})
+            slots.append({"unit":unit_id,"tray":tray_id,"material":tray.get("tray_type") or "","colorHex":str(tray.get("tray_color") or "").lstrip("#")[:8],"remainingPercent":remaining_percent(tray.get("remain")),"tagUid":tray.get("tag_uid") or "","active":active_tray in (global_id, str(tray_id))})
     virtual = ams.get("vt_tray")
     if isinstance(virtual, dict) and virtual.get("tray_type"):
-        slots.append({"unit":255,"tray":0,"material":virtual.get("tray_type") or "","colorHex":str(virtual.get("tray_color") or "").lstrip("#")[:8],"remainingPercent":virtual.get("remain"),"tagUid":virtual.get("tag_uid") or "","active":active_tray in ("254","255")})
+        slots.append({"unit":255,"tray":0,"material":virtual.get("tray_type") or "","colorHex":str(virtual.get("tray_color") or "").lstrip("#")[:8],"remainingPercent":remaining_percent(virtual.get("remain")),"tagUid":virtual.get("tag_uid") or "","active":active_tray in ("254","255")})
     return {"state":mapped,"nozzleTemp":p.get("nozzle_temper"),"bedTemp":p.get("bed_temper"),"filename":p.get("subtask_name") or p.get("gcode_file"),"progress":p.get("mc_percent"),"ams":slots,"bambu":{"remainingMinutes":p.get("mc_remaining_time"),"layer":p.get("layer_num"),"totalLayers":p.get("total_layer_num"),"hms":p.get("hms") or [],"wifiSignal":p.get("wifi_signal")}}
 
 def bambu_upload_and_start(client, filename, content, plate_index=0):
@@ -204,13 +210,13 @@ def bambu_usage_event(payload):
 
 def request_json(url, method="GET", data=None, headers=None):
     body = json.dumps(data).encode() if data is not None else None
-    req = urllib.request.Request(url, data=body, method=method, headers={"Content-Type": "application/json", **(headers or {})})
+    req = urllib.request.Request(url, data=body, method=method, headers={"Content-Type": "application/json", "User-Agent": "LayerTrace-Agent/1.0", **(headers or {})})
     with urllib.request.urlopen(req, timeout=8) as response:
         content = response.read().decode()
         return json.loads(content) if content else {}
 
 def download_file(file_id, command_id):
-    req = urllib.request.Request(f"{CLOUD_URL}/api/agent?file={file_id}&command={command_id}", headers={"Authorization": f"Bearer {TOKEN}"})
+    req = urllib.request.Request(f"{CLOUD_URL}/api/agent?file={file_id}&command={command_id}", headers={"Authorization": f"Bearer {TOKEN}", "User-Agent": "LayerTrace-Agent/1.0"})
     with urllib.request.urlopen(req, timeout=120) as response:
         return response.read()
 

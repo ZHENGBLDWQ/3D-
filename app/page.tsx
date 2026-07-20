@@ -39,6 +39,58 @@ type Material = {
   stockValue: number;
   usedPercent: number;
 };
+type InventoryMaterial = Material & {
+  sku: string;
+  specification: string;
+  spoolWeightGrams: number;
+  spoolCount: number;
+  supplier: string;
+  warehouse: string;
+  location: string;
+  lotNo: string;
+  receivedAt: string | null;
+  expiryAt: string | null;
+  status: string;
+  notes: string;
+};
+type InventoryTransaction = {
+  id: number;
+  batchId: number;
+  material: string;
+  color: string;
+  type: string;
+  grams: number;
+  note: string;
+  documentNo: string;
+  operator: string;
+  warehouse: string;
+  source: string;
+  createdAt: string;
+};
+type InventoryData = {
+  materials: InventoryMaterial[];
+  transactions: InventoryTransaction[];
+  stocktakes: Array<{
+    id: number;
+    batchId: number;
+    material: string;
+    color: string;
+    bookGrams: number;
+    countedGrams: number;
+    varianceGrams: number;
+    reason: string;
+    operator: string;
+    createdAt: string;
+  }>;
+  summary: {
+    skuCount: number;
+    totalGrams: number;
+    stockValue: number;
+    lowStockCount: number;
+    monthlyUsageGrams: number;
+    monthlyWasteGrams: number;
+  };
+};
 type ItemCost = {
   itemId: number;
   plannedGrams: number;
@@ -151,6 +203,7 @@ export default function Home() {
         "设备管理",
         "外部任务",
         "耗材卷同步",
+        "耗材库存",
         "经营分析",
         "良率分析",
         "系统中心",
@@ -321,6 +374,7 @@ export default function Home() {
                 "文件资产",
                 "设备管理",
                 "耗材卷同步",
+                "耗材库存",
                 "经营分析",
                 "良率分析",
                 "系统中心",
@@ -367,6 +421,8 @@ export default function Home() {
             <ExternalPrintJobs data={data} toast={toast} onChanged={loadData} />
           ) : section === "耗材卷同步" ? (
             <SpoolmanInventory toast={toast} />
+          ) : section === "耗材库存" ? (
+            <InventoryCenter toast={toast} />
           ) : (
             <Management
               section={section}
@@ -563,6 +619,148 @@ function Dashboard({
         />
       </section>
     </>
+  );
+}
+
+function InventoryCenter({ toast }: { toast: (message: string) => void }) {
+  const [inventory, setInventory] = useState<InventoryData | null>(null);
+  const [dialog, setDialog] = useState<"create" | "movement" | "stocktake" | null>(null);
+  const [selectedBatch, setSelectedBatch] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function loadInventory() {
+    const response = await fetch("/api/inventory", { cache: "no-store" });
+    const result = await response.json();
+    if (response.ok) setInventory(result);
+    else toast(result.error || "库存数据读取失败");
+  }
+  useEffect(() => {
+    void loadInventory();
+  }, []);
+
+  async function submitInventory(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!dialog) return;
+    setSaving(true);
+    const values = Object.fromEntries(new FormData(event.currentTarget));
+    const action = dialog === "create" ? "createMaterial" : dialog;
+    const response = await fetch("/api/inventory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, ...values }),
+    });
+    const result = await response.json();
+    setSaving(false);
+    if (!response.ok) return toast(result.error || "库存操作失败");
+    toast(dialog === "stocktake" ? `盘点完成，差异 ${Number(result.variance || 0).toFixed(1)}g` : "库存记录已保存");
+    setDialog(null);
+    setSelectedBatch(null);
+    await loadInventory();
+  }
+
+  if (!inventory) return <div className="empty-state">正在建立正规库存台账…</div>;
+  const summary = inventory.summary;
+  const totalSpools = inventory.materials.reduce(
+    (sum, item) => sum + Number(item.remainingGrams || 0) / Math.max(1, Number(item.spoolWeightGrams || 1000)),
+    0,
+  );
+  return (
+    <section className="inventory-center">
+      <div className="inventory-kpis">
+        <article><small>物料品种</small><strong>{summary.skuCount}</strong><span>SKU / 批次</span></article>
+        <article><small>账面库存</small><strong>{(Number(summary.totalGrams || 0) / 1000).toFixed(2)} kg</strong><span>约 {totalSpools.toFixed(1)} 卷</span></article>
+        <article><small>库存价值</small><strong>RM {Number(summary.stockValue || 0).toFixed(2)}</strong><span>移动加权成本口径</span></article>
+        <article className={Number(summary.lowStockCount) ? "inventory-kpi-alert" : ""}><small>补货预警</small><strong>{summary.lowStockCount}</strong><span>低于安全库存</span></article>
+        <article><small>本月领用</small><strong>{Number(summary.monthlyUsageGrams || 0).toFixed(0)} g</strong><span>打印自动扣减</span></article>
+        <article><small>本月损耗</small><strong>{Number(summary.monthlyWasteGrams || 0).toFixed(0)} g</strong><span>损耗 + 盘亏</span></article>
+      </div>
+      <div className="inventory-toolbar">
+        <div>
+          <small>WAREHOUSE CONTROL</small>
+          <h2>耗材库存总账</h2>
+          <p>物料主档、批次卷、出入库、盘点、损耗、预警和成本统一留痕。</p>
+        </div>
+        <div>
+          <button onClick={() => { setSelectedBatch(null); setDialog("movement"); }}>出入库登记</button>
+          <button onClick={() => { setSelectedBatch(null); setDialog("stocktake"); }}>库存盘点</button>
+          <button className="primary" onClick={() => setDialog("create")}>＋ 新建物料</button>
+        </div>
+      </div>
+      <div className="panel inventory-ledger-panel">
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>物料 / SKU</th><th>规格与批次</th><th>账面库存</th><th>预占 / 可用</th><th>单位成本</th><th>库存价值</th><th>库位</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>
+              {inventory.materials.map((item) => {
+                const available = Math.max(0, Number(item.remainingGrams) - Number(item.reservedGrams || 0));
+                const low = available <= Number(item.lowStockGrams || 0);
+                return <tr key={item.id} className={low ? "inventory-low-row" : ""}>
+                  <td><span className="product-identity"><strong>{item.material} · {item.color}</strong><small>{item.sku} · {item.brand || "未填写品牌"}</small></span></td>
+                  <td><span className="product-identity"><strong>{item.specification || `${item.spoolWeightGrams}g/卷`}</strong><small>批次 {item.lotNo || "未编号"} · {item.spoolCount.toFixed(1)} 卷入账</small></span></td>
+                  <td><span className="inventory-quantity"><strong>{Number(item.remainingGrams).toFixed(1)} g</strong><small>{(Number(item.remainingGrams) / Math.max(1, Number(item.spoolWeightGrams))).toFixed(2)} 卷</small></span></td>
+                  <td><span className="inventory-quantity"><strong>{Number(item.reservedGrams || 0).toFixed(1)} / {available.toFixed(1)} g</strong><small>预占 / 可用</small></span></td>
+                  <td>RM {Number(item.costPerKg || 0).toFixed(2)}/kg</td>
+                  <td><strong>RM {(Number(item.remainingGrams) * Number(item.costPerKg || 0) / 1000).toFixed(2)}</strong></td>
+                  <td>{item.warehouse}<small className="table-hint">{item.location || "未设库位"}</small></td>
+                  <td><span className={`inventory-status ${low ? "low" : ""}`}>{low ? "需补货" : item.status}</span><small className="table-hint">安全线 {item.lowStockGrams}g</small></td>
+                  <td><div className="row-actions"><button onClick={() => { setSelectedBatch(item.id); setDialog("movement"); }}>出入库</button><button onClick={() => { setSelectedBatch(item.id); setDialog("stocktake"); }}>盘点</button></div></td>
+                </tr>;
+              })}
+              {inventory.materials.length === 0 && <tr><td colSpan={9}><div className="empty-state">暂无耗材，请先建立物料主档。</div></td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div className="panel inventory-flow-panel">
+        <PanelHead eyebrow="PERPETUAL LEDGER" title="库存流水 · 最近 300 笔" action="刷新 ↻" onClick={() => void loadInventory()} />
+        <div className="table-wrap"><table><thead><tr><th>时间</th><th>单据号</th><th>物料</th><th>业务类型</th><th>数量</th><th>仓库 / 经办人</th><th>来源 / 备注</th></tr></thead><tbody>
+          {inventory.transactions.map((tx) => <tr key={tx.id}><td>{new Date(tx.createdAt).toLocaleString("zh-CN")}</td><td>{tx.documentNo || `TX-${tx.id}`}</td><td>{tx.material} · {tx.color}</td><td><span className={`flow-type ${tx.grams >= 0 ? "in" : "out"}`}>{tx.type}</span></td><td className={tx.grams >= 0 ? "flow-in" : "flow-out"}>{tx.grams >= 0 ? "+" : ""}{Number(tx.grams).toFixed(1)} g</td><td>{tx.warehouse}<small className="table-hint">{tx.operator || "系统"}</small></td><td>{tx.source}<small className="table-hint">{tx.note || "—"}</small></td></tr>)}
+          {inventory.transactions.length === 0 && <tr><td colSpan={7}><div className="empty-state">暂无库存流水。</div></td></tr>}
+        </tbody></table></div>
+      </div>
+      {dialog && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setDialog(null)}>
+        <form className="record-modal inventory-modal" onSubmit={submitInventory}>
+          <div className="modal-head"><div><small>INVENTORY DOCUMENT</small><h2>{dialog === "create" ? "新建物料与期初入库" : dialog === "movement" ? "出入库登记" : "库存盘点"}</h2></div><button type="button" onClick={() => setDialog(null)}>×</button></div>
+          <div className="form-grid">
+            {dialog === "create" ? <>
+              <Field name="sku" label="物料编码 SKU" placeholder="PLA-WHITE-1KG" />
+              <Field name="material" label="材料类型" placeholder="PLA" />
+              <Field name="color" label="颜色" placeholder="哑光白" />
+              <Field name="brand" label="品牌" placeholder="R3D" />
+              <Field name="specification" label="规格" placeholder="1.75mm · 1kg/卷" />
+              <Field name="spoolWeightGrams" label="每卷净重（g）" type="number" defaultValue="1000" />
+              <Field name="spoolCount" label="入库卷数" type="number" defaultValue="1" />
+              <Field name="costPerKg" label="成本（RM/kg）" type="number" defaultValue="0" />
+              <Field name="lowStockGrams" label="安全库存（g）" type="number" defaultValue="1000" />
+              <Field name="supplier" label="供应商" placeholder="供应商名称" />
+              <Field name="lotNo" label="批次号" placeholder="LOT-202607" />
+              <Field name="documentNo" label="入库单号" placeholder="GRN-202607-001" />
+              <Field name="warehouse" label="仓库" placeholder="主仓" defaultValue="主仓" />
+              <Field name="location" label="库位" placeholder="A-01-01" />
+              <Field name="receivedAt" label="入库日期" type="date" />
+              <Field name="operator" label="经办人" placeholder="员工姓名" />
+              <Field name="notes" label="备注" placeholder="采购来源或异常说明" />
+            </> : <>
+              <label><span>耗材批次</span><select name="batchId" required defaultValue={selectedBatch || ""}><option value="">请选择</option>{inventory.materials.map((item) => <option key={item.id} value={item.id}>{item.sku} · {item.material} {item.color} · {item.remainingGrams.toFixed(0)}g</option>)}</select></label>
+              {dialog === "movement" ? <>
+                <label><span>业务类型</span><select name="type" required><option>采购入库</option><option>生产领用</option><option>损耗</option><option>报废</option><option>退料</option></select></label>
+                <Field name="grams" label="数量（g）" type="number" />
+                <Field name="documentNo" label="单据号" placeholder="GRN / ISSUE / LOSS" />
+                <Field name="operator" label="经办人" placeholder="员工姓名" />
+                <Field name="warehouse" label="仓库" defaultValue="主仓" />
+                <Field name="note" label="业务说明" placeholder="订单、任务或损耗原因" />
+              </> : <>
+                <Field name="countedGrams" label="实盘重量（g）" type="number" />
+                <Field name="operator" label="盘点人" placeholder="员工姓名" />
+                <Field name="reason" label="差异原因" placeholder="称重差异、标签错误、遗失等" />
+              </>}
+            </>}
+          </div>
+          <p className="modal-note">所有数量统一以克为库存基本单位；卷数仅用于采购和现场查看，流水保存后不可删除，只能用反向业务或盘点调整。</p>
+          <button className="primary modal-submit" disabled={saving}>{saving ? "保存中…" : "保存库存单据"}</button>
+        </form>
+      </div>}
+    </section>
   );
 }
 

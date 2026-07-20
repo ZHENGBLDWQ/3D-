@@ -120,6 +120,13 @@
       "when": 1784535980782,
       "tag": "0016_boring_zarda",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1784544316055,
+      "tag": "0017_inventory_control",
+      "breakpoints": true
     }
   ]
 }

@@ -123,6 +123,46 @@ export const inventoryTransactions = sqliteTable("inventory_transactions", {
     .default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const materialInventoryMeta = sqliteTable("material_inventory_meta", {
+  batchId: integer("batch_id")
+    .primaryKey()
+    .references(() => materialBatches.id),
+  sku: text("sku").notNull().unique(),
+  specification: text("specification").notNull().default(""),
+  spoolWeightGrams: real("spool_weight_grams").notNull().default(1000),
+  spoolCount: real("spool_count").notNull().default(1),
+  supplier: text("supplier").notNull().default(""),
+  warehouse: text("warehouse").notNull().default("主仓"),
+  location: text("location").notNull().default(""),
+  lotNo: text("lot_no").notNull().default(""),
+  receivedAt: text("received_at"),
+  expiryAt: text("expiry_at"),
+  status: text("status").notNull().default("在库"),
+  notes: text("notes").notNull().default(""),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const inventoryTransactionMeta = sqliteTable("inventory_transaction_meta", {
+  transactionId: integer("transaction_id")
+    .primaryKey()
+    .references(() => inventoryTransactions.id),
+  documentNo: text("document_no").notNull().default(""),
+  operator: text("operator").notNull().default(""),
+  warehouse: text("warehouse").notNull().default("主仓"),
+  source: text("source").notNull().default("人工"),
+});
+
+export const inventoryStocktakes = sqliteTable("inventory_stocktakes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  batchId: integer("batch_id").notNull().references(() => materialBatches.id),
+  bookGrams: real("book_grams").notNull(),
+  countedGrams: real("counted_grams").notNull(),
+  varianceGrams: real("variance_grams").notNull(),
+  reason: text("reason").notNull().default(""),
+  operator: text("operator").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const orderItems = sqliteTable("order_items", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   orderId: integer("order_id")
