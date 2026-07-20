@@ -1921,6 +1921,7 @@ type Printer = {
 const bambuPresets: Record<string, { volume: string; watts: number }> = {
   "Bambu Lab X1C": { volume: "256 × 256 × 256 mm", watts: 1000 },
   "Bambu Lab X1E": { volume: "256 × 256 × 256 mm", watts: 1000 },
+  "Bambu Lab X2D": { volume: "256 × 256 × 260 mm", watts: 1000 },
   "Bambu Lab P1S": { volume: "256 × 256 × 256 mm", watts: 1000 },
   "Bambu Lab P1P": { volume: "256 × 256 × 256 mm", watts: 1000 },
   "Bambu Lab P2S": { volume: "256 × 256 × 256 mm", watts: 1000 },
@@ -2088,6 +2089,7 @@ function PrinterManager({ toast }: { toast: (m: string) => void }) {
               <optgroup label="X 系列">
                 <option>Bambu Lab X1C</option>
                 <option>Bambu Lab X1E</option>
+                <option>Bambu Lab X2D</option>
               </optgroup>
               <optgroup label="P 系列">
                 <option>Bambu Lab P1S</option>
