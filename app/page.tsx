@@ -33,6 +33,23 @@ type Material = {
   remainingGrams: number;
   lowStockGrams: number;
   costPerKg: number;
+  reservedGrams: number;
+  availableGrams: number;
+  stockValue: number;
+  usedPercent: number;
+};
+type ItemCost = {
+  itemId: number;
+  plannedGrams: number;
+  materialCost: number;
+  machineCost: number;
+  energyCost: number;
+  laborCost: number;
+  overheadCost: number;
+  estimatedUnitCost: number;
+  suggestedPrice: number;
+  actualUnitCost: number | null;
+  completedUnits: number;
 };
 type Order = {
   id: number;
@@ -61,6 +78,7 @@ type WorkspaceData = {
   materials: Material[];
   orders: Order[];
   jobs: Job[];
+  itemCosts: ItemCost[];
 };
 
 const nav: { label: Section; mark: string }[] = [
@@ -81,6 +99,7 @@ const emptyData: WorkspaceData = {
   materials: [],
   orders: [],
   jobs: [],
+  itemCosts: [],
 };
 const entityBySection: Record<
   "打印物品" | "耗材库存" | "订单" | "打印队列",
@@ -347,6 +366,7 @@ export default function Home() {
             <Management
               section={section}
               filtered={filtered}
+              itemCosts={data.itemCosts}
               onDelete={remove}
               onAction={runJobAction}
               onCost={updateMaterialCost}
@@ -544,6 +564,7 @@ function Dashboard({
 function Management({
   section,
   filtered,
+  itemCosts,
   onDelete,
   onAction,
   onCost,
@@ -555,6 +576,7 @@ function Management({
     orders: Order[];
     jobs: Job[];
   };
+  itemCosts: ItemCost[];
   onDelete: (e: Entity, id: number) => void;
   onAction: (j: Job, a: string) => void;
   onCost: (m: Material) => void;
@@ -562,33 +584,98 @@ function Management({
   const configs = {
     打印物品: {
       eyebrow: "ITEM LIBRARY",
-      note: "维护可打印产品及其预计用料、工时",
-      heads: ["SKU", "物品名称", "分类", "预计用料", "预计工时", "操作"],
-      rows: filtered.items.map((x) => [
-        x.sku,
-        x.name,
-        x.category,
-        `${x.estimatedGrams} g`,
-        `${x.estimatedMinutes} 分钟`,
-        <button
-          className="danger-link"
-          key="d"
-          onClick={() => onDelete("item", x.id)}
-        >
-          删除
-        </button>,
-      ]),
+      note: "按单件核算耗材、设备、电费、人工和管理分摊，支持报价与毛利控制",
+      heads: [
+        "SKU / 产品",
+        "计划用料",
+        "成本构成",
+        "预计 / 实际单件",
+        "建议售价",
+        "操作",
+      ],
+      rows: filtered.items.map((x) => {
+        const cost = itemCosts.find((value) => value.itemId === x.id);
+        return [
+          <span className="product-identity" key="product">
+            <strong>{x.name}</strong>
+            <small>
+              {x.sku} · {x.category}
+            </small>
+          </span>,
+          `${(cost?.plannedGrams ?? x.estimatedGrams).toFixed(1)} g / ${x.estimatedMinutes} 分钟`,
+          <span className="cost-breakdown" key="cost">
+            <small>材料 RM {(cost?.materialCost || 0).toFixed(2)}</small>
+            <small>设备 RM {(cost?.machineCost || 0).toFixed(2)}</small>
+            <small>电费 RM {(cost?.energyCost || 0).toFixed(2)}</small>
+            <small>
+              人工/分摊 RM{" "}
+              {((cost?.laborCost || 0) + (cost?.overheadCost || 0)).toFixed(2)}
+            </small>
+          </span>,
+          <span className="unit-cost-pair" key="unit">
+            <strong>预计 RM {(cost?.estimatedUnitCost || 0).toFixed(2)}</strong>
+            <small>
+              {cost?.actualUnitCost == null
+                ? "完成生产后显示实际成本"
+                : `实际 RM ${cost.actualUnitCost.toFixed(2)} · ${cost.completedUnits}件`}
+            </small>
+          </span>,
+          <span key="price">
+            RM {(cost?.suggestedPrice || 0).toFixed(2)}
+            <small className="table-hint">按50%目标毛利</small>
+          </span>,
+          <button
+            className="danger-link"
+            key="d"
+            onClick={() => onDelete("item", x.id)}
+          >
+            删除
+          </button>,
+        ];
+      }),
     },
     耗材库存: {
       eyebrow: "MATERIAL BATCHES",
-      note: "按卷材批次跟踪重量、预警线和采购成本",
-      heads: ["材料", "颜色", "品牌", "当前余量", "采购成本", "预警线", "操作"],
+      note: "按卷追踪物理余量、任务预占、真实可用量、库存价值和消耗进度",
+      heads: [
+        "耗材卷",
+        "库存进度",
+        "任务预占",
+        "可用量",
+        "库存价值",
+        "预警",
+        "操作",
+      ],
       rows: filtered.materials.map((x) => [
-        x.material,
-        x.color,
-        x.brand || "—",
-        `${x.remainingGrams} / ${x.initialGrams} g`,
-        `RM ${x.costPerKg || 0}/kg`,
+        <span className="product-identity" key="material">
+          <strong>
+            {x.material} · {x.color}
+          </strong>
+          <small>
+            {x.brand || "未填写品牌"} · RM {x.costPerKg || 0}/kg
+          </small>
+        </span>,
+        <span className="stock-progress" key="stock">
+          <b>
+            {x.remainingGrams.toFixed(1)} / {x.initialGrams.toFixed(0)}g
+          </b>
+          <i>
+            <span
+              style={{
+                width: `${Math.max(0, Math.min(100, 100 - x.usedPercent))}%`,
+              }}
+            />
+          </i>
+          <small>已使用 {x.usedPercent.toFixed(1)}%</small>
+        </span>,
+        `${x.reservedGrams.toFixed(1)} g`,
+        <strong
+          className={x.availableGrams <= x.lowStockGrams ? "stock-low" : ""}
+          key="available"
+        >
+          {x.availableGrams.toFixed(1)} g
+        </strong>,
+        `RM ${x.stockValue.toFixed(2)}`,
         `${x.lowStockGrams} g`,
         <span className="row-actions" key="d">
           <button onClick={() => onCost(x)}>改成本</button>
@@ -834,7 +921,7 @@ function ProductionDetails({
               />
               <Field
                 name="unitPrice"
-                label="单价（元）"
+                label="单价（RM）"
                 type="number"
                 defaultValue="0"
               />
