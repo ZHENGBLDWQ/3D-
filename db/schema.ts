@@ -129,6 +129,7 @@ export const printerCommands = sqliteTable("printer_commands", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   printerId: integer("printer_id").notNull().references(() => printers.id),
   command: text("command").notNull(),
+  payload: text("payload").notNull().default("{}"),
   status: text("status").notNull().default("待执行"),
   result: text("result").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),

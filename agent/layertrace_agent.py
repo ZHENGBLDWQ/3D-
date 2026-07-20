@@ -3,7 +3,9 @@ import json
 import os
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
+import uuid
 
 CLOUD_URL = os.environ.get("LAYERTRACE_URL", "https://layertrace-3d-print-ops.dongwanqing0.chatgpt.site").rstrip("/")
 TOKEN = os.environ["LAYERTRACE_TOKEN"]
@@ -18,6 +20,22 @@ def request_json(url, method="GET", data=None, headers=None):
     with urllib.request.urlopen(req, timeout=8) as response:
         content = response.read().decode()
         return json.loads(content) if content else {}
+
+def download_file(file_id, command_id):
+    req = urllib.request.Request(f"{CLOUD_URL}/api/agent?file={file_id}&command={command_id}", headers={"Authorization": f"Bearer {TOKEN}"})
+    with urllib.request.urlopen(req, timeout=120) as response:
+        return response.read()
+
+def upload_file(url, filename, content, fields=None, headers=None):
+    boundary = f"----LayerTrace{uuid.uuid4().hex}"
+    chunks = []
+    for name, value in (fields or {}).items():
+        chunks.extend([f"--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n".encode()])
+    chunks.extend([f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\nContent-Type: application/octet-stream\r\n\r\n".encode(), content, f"\r\n--{boundary}--\r\n".encode()])
+    req = urllib.request.Request(url, data=b"".join(chunks), method="POST", headers={"Content-Type": f"multipart/form-data; boundary={boundary}", **(headers or {})})
+    with urllib.request.urlopen(req, timeout=180) as response:
+        body = response.read().decode()
+        return json.loads(body) if body else {}
 
 def moonraker_status():
     query = "extruder&heater_bed&print_stats&virtual_sdcard"
@@ -39,6 +57,16 @@ def report(payload):
 
 def execute_command(command):
     name = command["name"]
+    if name == "start":
+        payload = command.get("payload", {})
+        filename = os.path.basename(payload["filename"])
+        content = download_file(payload["fileId"], command["id"])
+        if CONNECTOR == "moonraker":
+            upload_file(f"{PRINTER_URL}/server/files/upload", filename, content)
+            request_json(f"{PRINTER_URL}/printer/print/start?filename={urllib.parse.quote(filename)}", "POST")
+        else:
+            upload_file(f"{PRINTER_URL}/api/files/local", filename, content, {"select": "true", "print": "true"}, {"X-Api-Key": PRINTER_API_KEY})
+        return
     if CONNECTOR == "moonraker":
         request_json(f"{PRINTER_URL}/printer/print/{name}", "POST")
     else:

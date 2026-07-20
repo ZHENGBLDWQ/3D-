@@ -1,0 +1,1 @@
+ALTER TABLE `printer_commands` ADD `payload` text DEFAULT '{}' NOT NULL;
