@@ -82,10 +82,10 @@ export default function Home() {
       <header className="topbar"><div><p>生产控制台</p><h1>{section}</h1></div><div className="top-actions"><label className="search"><span>⌕</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索当前数据"/></label><button className="icon-btn" aria-label="通知">♢<i/></button><button className="primary" onClick={openCreate}>＋ 新建{section==="概览"?"任务":section}</button></div></header>
       <div className="workspace">
         <div className="date-row"><div><span className="live-dot"/> {loading?"正在读取生产数据":"实时生产数据"}</div><time>2026年7月20日 · 星期一</time></div>
-        {section === "概览" ? <Dashboard data={data} metrics={{printing,waiting,completed,alerts}} onNavigate={setSection} onAdvance={advanceJob}/> : <Management section={section} filtered={filtered} onDelete={remove} onAdvance={advanceJob}/>} 
+        {section === "概览" ? <Dashboard data={data} metrics={{printing,waiting,completed,alerts}} onNavigate={setSection} onAdvance={advanceJob}/> : <Management section={section} filtered={filtered} onDelete={remove} onAdvance={advanceJob}/>}
       </div>
     </section>
-    {modal && <CreateModal entity={modal} data={data} onClose={() => setModal(null)} onSaved={async () => { setModal(null); toast("记录已保存"); await loadData(); }}/>} 
+    {modal ? <CreateModal entity={modal} data={data} onClose={() => setModal(null)} onSaved={async () => { setModal(null); toast("记录已保存"); await loadData(); }}/> : null}
     {notice&&<div className="toast"><span>✓</span>{notice}</div>}
   </main>;
 }
