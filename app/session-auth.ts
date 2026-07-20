@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { headers } from "next/headers";
+import { getD1 } from "../db";
 
 const COOKIE_NAME = "layertrace_session";
 const encoder = new TextEncoder();
@@ -23,7 +24,37 @@ async function hmac(value: string) {
 
 export async function verifyAdminCredentials(email: string, password: string) {
   const values = config();
-  return values.emails.includes(email.trim().toLowerCase()) && !!values.password && password === values.password;
+  const normalized = email.trim().toLowerCase();
+  if (values.emails.includes(normalized) && !!values.password && password === values.password) return true;
+  await ensurePasswordColumn();
+  const member = await getD1().prepare("SELECT password_hash AS passwordHash,status FROM organization_members WHERE lower(email)=?").bind(normalized).first<{passwordHash:string|null;status:string}>();
+  return !!member?.passwordHash && member.status !== "disabled" && await verifyPassword(password, member.passwordHash);
+}
+
+async function ensurePasswordColumn() {
+  const columns = await getD1().prepare("PRAGMA table_info(organization_members)").all<{name:string}>();
+  if (!columns.results.some(column => column.name === "password_hash")) {
+    await getD1().prepare("ALTER TABLE organization_members ADD COLUMN password_hash TEXT").run();
+  }
+}
+
+function hex(bytes: Uint8Array) { return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join(""); }
+function unhex(value: string) { return new Uint8Array(value.match(/.{2}/g)?.map(x => parseInt(x, 16)) || []); }
+
+export async function hashPassword(password: string) {
+  await ensurePasswordColumn();
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
+  const result = new Uint8Array(await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt, iterations: 120000 }, key, 256));
+  return `pbkdf2$120000$${hex(salt)}$${hex(result)}`;
+}
+
+async function verifyPassword(password: string, stored: string) {
+  const [kind, rounds, salt, expected] = stored.split("$");
+  if (kind !== "pbkdf2" || !rounds || !salt || !expected) return false;
+  const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
+  const result = new Uint8Array(await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: unhex(salt), iterations: Number(rounds) }, key, 256));
+  return hex(result) === expected;
 }
 
 export async function createSessionCookie(email: string) {
@@ -38,7 +69,7 @@ export async function getSessionUser(): Promise<{ email: string; displayName: st
   const [email, expires, signature] = decodeURIComponent(raw).split("|");
   if (!email || !expires || !signature || Number(expires) <= Date.now() / 1000) return null;
   const expected = await hmac(`${email}|${expires}`);
-  if (!expected || signature !== expected || !config().emails.includes(email)) return null;
+  if (!expected || signature !== expected) return null;
   return { email, displayName: email.split("@")[0] };
 }
 
