@@ -1980,18 +1980,38 @@ function PrinterManager({ toast }: { toast: (m: string) => void }) {
     } else toast("状态更新失败");
   }
   async function rate(printer: Printer) {
-    const value = window.prompt(
+    const hourlyRate = window.prompt(
       `设置 ${printer.name} 的设备成本（RM/小时）`,
       String(printer.hourlyRate || 0),
     );
-    if (value === null) return;
+    if (hourlyRate === null) return;
+    const powerWatts = window.prompt(
+      `设置 ${printer.name} 的估算功率（W）`,
+      String(printer.powerWatts || 1000),
+    );
+    if (powerWatts === null) return;
+    const hourly = Number(hourlyRate);
+    const watts = Number(powerWatts);
+    if (
+      !Number.isFinite(hourly) ||
+      hourly < 0 ||
+      !Number.isFinite(watts) ||
+      watts < 0
+    ) {
+      toast("成本与功率必须是大于或等于 0 的数字");
+      return;
+    }
     const response = await fetch("/api/printers", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: printer.id, hourlyRate: Number(value) }),
+      body: JSON.stringify({
+        id: printer.id,
+        hourlyRate: hourly,
+        powerWatts: watts,
+      }),
     });
     if (response.ok) {
-      toast("设备工时成本已更新");
+      toast("设备成本参数已更新");
       await load();
     } else toast("成本更新失败");
   }
@@ -2209,6 +2229,7 @@ function PrinterManager({ toast }: { toast: (m: string) => void }) {
                 )}
               </div>
               <div className="printer-actions">
+                <button onClick={() => rate(p)}>成本设置</button>
                 <button onClick={() => connect(p)}>连接代理</button>
                 {p.connectionState !== "未连接" && (
                   <>

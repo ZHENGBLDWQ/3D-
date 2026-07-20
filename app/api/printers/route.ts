@@ -171,8 +171,14 @@ export async function PATCH(request: Request) {
       .set({
         status: p.status,
         totalHours: p.totalHours,
-        hourlyRate: p.hourlyRate,
-        powerWatts: p.powerWatts,
+        hourlyRate:
+          p.hourlyRate === undefined
+            ? undefined
+            : Math.max(0, Number(p.hourlyRate) || 0),
+        powerWatts:
+          p.powerWatts === undefined
+            ? undefined
+            : Math.max(0, Number(p.powerWatts) || 0),
         maintenanceDueAt: p.maintenanceDueAt,
       })
       .where(eq(printers.id, p.id))
