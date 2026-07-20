@@ -101,3 +101,18 @@ export const printFiles = sqliteTable("print_files", {
   notes: text("notes").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const printers = sqliteTable("printers", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+  model: text("model").notNull().default(""),
+  technology: text("technology").notNull().default("FDM"),
+  location: text("location").notNull().default(""),
+  nozzleDiameter: real("nozzle_diameter").notNull().default(0.4),
+  buildVolume: text("build_volume").notNull().default(""),
+  status: text("status").notNull().default("空闲"),
+  totalHours: real("total_hours").notNull().default(0),
+  maintenanceDueAt: text("maintenance_due_at"),
+  notes: text("notes").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
