@@ -1,6 +1,7 @@
 """LayerTrace local printer agent. Python 3.10+, standard library only."""
 import json
 import os
+from pathlib import Path
 import time
 import urllib.error
 import urllib.parse
@@ -15,6 +16,7 @@ PRINTER_API_KEY = os.environ.get("PRINTER_API_KEY", "")
 INTERVAL = max(5, int(os.environ.get("POLL_INTERVAL", "10")))
 SPOOLMAN_URL = os.environ.get("SPOOLMAN_URL", "").rstrip("/")
 SPOOLMAN_INTERVAL = max(30, int(os.environ.get("SPOOLMAN_INTERVAL", "60")))
+STATE_FILE = Path(os.environ.get("LAYERTRACE_STATE_FILE", Path(__file__).with_name(".layertrace_state.json")))
 
 def request_json(url, method="GET", data=None, headers=None):
     body = json.dumps(data).encode() if data is not None else None
@@ -43,7 +45,7 @@ def moonraker_status():
     query = "extruder&heater_bed&print_stats&virtual_sdcard"
     result = request_json(f"{PRINTER_URL}/printer/objects/query?{query}")["result"]["status"]
     stats, sd = result.get("print_stats", {}), result.get("virtual_sdcard", {})
-    return {"state": stats.get("state", "online"), "nozzleTemp": result.get("extruder", {}).get("temperature"), "bedTemp": result.get("heater_bed", {}).get("temperature"), "filename": stats.get("filename"), "progress": round(float(sd.get("progress", 0)) * 100, 1)}
+    return {"state": stats.get("state", "online"), "nozzleTemp": result.get("extruder", {}).get("temperature"), "bedTemp": result.get("heater_bed", {}).get("temperature"), "filename": stats.get("filename"), "progress": round(float(sd.get("progress", 0)) * 100, 1), "filamentUsed": stats.get("filament_used")}
 
 def octoprint_status():
     headers = {"X-Api-Key": PRINTER_API_KEY}
@@ -62,6 +64,29 @@ def spoolman_spools():
         vendor = filament.get("vendor") or {}
         result.append({"id": spool["id"], "filamentName": filament.get("name"), "vendor": vendor.get("name") if isinstance(vendor, dict) else str(vendor), "material": filament.get("material"), "colorHex": filament.get("color_hex"), "initialWeight": spool.get("initial_weight"), "remainingWeight": spool.get("remaining_weight"), "usedWeight": spool.get("used_weight"), "location": spool.get("location"), "lotNr": spool.get("lot_nr"), "archived": spool.get("archived", False), "lastUsed": spool.get("last_used")})
     return result
+
+def load_usage_state():
+    try:
+        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+def save_usage_state(state):
+    temporary = STATE_FILE.with_suffix(".tmp")
+    temporary.write_text(json.dumps(state), encoding="utf-8")
+    temporary.replace(STATE_FILE)
+
+def track_spool_usage(payload, spool_id):
+    if not SPOOLMAN_URL or CONNECTOR != "moonraker" or not spool_id or payload.get("filamentUsed") is None:
+        return
+    current = max(0.0, float(payload["filamentUsed"]))
+    filename = payload.get("filename") or ""
+    state = load_usage_state()
+    same_session = state.get("spoolId") == spool_id and state.get("filename") == filename and current >= float(state.get("filamentUsed", 0))
+    delta = current - float(state.get("filamentUsed", 0)) if same_session else 0
+    if delta > 0.01:
+        request_json(f"{SPOOLMAN_URL}/api/v1/spool/{spool_id}/use", "PUT", {"use_length": round(delta, 3)})
+    save_usage_state({"spoolId": spool_id, "filename": filename, "filamentUsed": current, "updatedAt": time.time()})
 
 def report(payload):
     return request_json(f"{CLOUD_URL}/api/agent", "POST", payload, {"Authorization": f"Bearer {TOKEN}"})
@@ -98,6 +123,10 @@ def main():
                 except (urllib.error.URLError, KeyError, ValueError, TimeoutError) as spool_error:
                     print(time.strftime("%F %T"), "Spoolman sync failed:", spool_error)
             result = report(payload)
+            try:
+                track_spool_usage(payload, result.get("printer", {}).get("activeSpoolId"))
+            except (urllib.error.URLError, KeyError, ValueError, TimeoutError, OSError) as usage_error:
+                print(time.strftime("%F %T"), "Spoolman usage update failed:", usage_error)
             print(time.strftime("%F %T"), result.get("printer", {}).get("name"), payload["state"], payload.get("progress"))
             command = result.get("command")
             if command:

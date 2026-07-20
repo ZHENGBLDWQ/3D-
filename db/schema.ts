@@ -122,6 +122,7 @@ export const printers = sqliteTable("printers", {
   bedTemp: real("bed_temp"),
   currentFile: text("current_file"),
   remoteProgress: real("remote_progress"),
+  activeSpoolExternalId: integer("active_spool_external_id"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 

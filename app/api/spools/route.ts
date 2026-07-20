@@ -1,6 +1,8 @@
-import { asc } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { spoolmanSpools } from "../../../db/schema";
+import { printers, spoolmanSpools } from "../../../db/schema";
 import { requireApiAccess } from "../../api-auth";
 
-export async function GET(){const denied=await requireApiAccess();if(denied)return denied;try{const spools=await getDb().select().from(spoolmanSpools).orderBy(asc(spoolmanSpools.archived),asc(spoolmanSpools.remainingWeight));return Response.json({spools});}catch(error){return Response.json({error:error instanceof Error?error.message:"读取耗材卷失败"},{status:500});}}
+export async function GET(){const denied=await requireApiAccess();if(denied)return denied;try{const [spools,printerRows]=await Promise.all([getDb().select().from(spoolmanSpools).orderBy(asc(spoolmanSpools.archived),asc(spoolmanSpools.remainingWeight)),getDb().select({id:printers.id,name:printers.name,connectionState:printers.connectionState,activeSpoolExternalId:printers.activeSpoolExternalId}).from(printers).orderBy(asc(printers.name))]);return Response.json({spools,printers:printerRows});}catch(error){return Response.json({error:error instanceof Error?error.message:"读取耗材卷失败"},{status:500});}}
+
+export async function PATCH(request:Request){const denied=await requireApiAccess(true);if(denied)return denied;try{const body=await request.json() as {printerId?:number;spoolId?:number|null};if(!body.printerId)return Response.json({error:"请选择打印机"},{status:400});if(body.spoolId){const [spool]=await getDb().select().from(spoolmanSpools).where(eq(spoolmanSpools.externalId,body.spoolId)).limit(1);if(!spool||spool.archived)return Response.json({error:"耗材卷不存在或已归档"},{status:400});}const [printer]=await getDb().update(printers).set({activeSpoolExternalId:body.spoolId||null}).where(eq(printers.id,body.printerId)).returning();if(!printer)return Response.json({error:"打印机不存在"},{status:404});return Response.json({printer});}catch(error){return Response.json({error:error instanceof Error?error.message:"挂载耗材卷失败"},{status:500});}}

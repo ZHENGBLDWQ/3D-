@@ -30,3 +30,5 @@ python .\agent\layertrace_agent.py
 ```
 
 Spoolman 地址只存在本地环境变量中，不会上传云端。同步遵循 Spoolman REST API v1 的 `/api/v1/spool` 数据结构。
+
+在网页将耗材卷挂载到打印机后，Moonraker 代理会读取 Klipper `print_stats.filament_used` 的增量，并调用 Spoolman `PUT /api/v1/spool/{id}/use` 回写实际使用长度。本地基线保存在 `.layertrace_state.json`，代理重启后不会重复扣减。OctoPrint 没有统一的实际挤出长度字段，因此当前只支持挂载与库存同步，不自动估算扣减。

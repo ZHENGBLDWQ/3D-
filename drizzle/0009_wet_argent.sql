@@ -1,0 +1,1 @@
+ALTER TABLE `printers` ADD `active_spool_external_id` integer;
