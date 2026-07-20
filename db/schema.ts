@@ -124,3 +124,13 @@ export const printers = sqliteTable("printers", {
   remoteProgress: real("remote_progress"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const printerCommands = sqliteTable("printer_commands", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  printerId: integer("printer_id").notNull().references(() => printers.id),
+  command: text("command").notNull(),
+  status: text("status").notNull().default("待执行"),
+  result: text("result").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
+});

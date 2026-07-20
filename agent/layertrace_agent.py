@@ -16,7 +16,8 @@ def request_json(url, method="GET", data=None, headers=None):
     body = json.dumps(data).encode() if data is not None else None
     req = urllib.request.Request(url, data=body, method=method, headers={"Content-Type": "application/json", **(headers or {})})
     with urllib.request.urlopen(req, timeout=8) as response:
-        return json.loads(response.read().decode())
+        content = response.read().decode()
+        return json.loads(content) if content else {}
 
 def moonraker_status():
     query = "extruder&heater_bed&print_stats&virtual_sdcard"
@@ -36,6 +37,15 @@ def octoprint_status():
 def report(payload):
     return request_json(f"{CLOUD_URL}/api/agent", "POST", payload, {"Authorization": f"Bearer {TOKEN}"})
 
+def execute_command(command):
+    name = command["name"]
+    if CONNECTOR == "moonraker":
+        request_json(f"{PRINTER_URL}/printer/print/{name}", "POST")
+    else:
+        headers = {"X-Api-Key": PRINTER_API_KEY}
+        payload = {"command": "cancel"} if name == "cancel" else {"command": "pause", "action": name}
+        request_json(f"{PRINTER_URL}/api/job", "POST", payload, headers)
+
 def main():
     print(f"LayerTrace agent started: {CONNECTOR} @ {PRINTER_URL}")
     while True:
@@ -43,6 +53,15 @@ def main():
             payload = moonraker_status() if CONNECTOR == "moonraker" else octoprint_status()
             result = report(payload)
             print(time.strftime("%F %T"), result.get("printer", {}).get("name"), payload["state"], payload.get("progress"))
+            command = result.get("command")
+            if command:
+                try:
+                    execute_command(command)
+                    report({**payload, "ack": {"id": command["id"], "ok": True, "result": "本地代理执行成功"}})
+                    print(time.strftime("%F %T"), "command completed:", command["name"])
+                except (urllib.error.URLError, ValueError, TimeoutError) as command_error:
+                    report({**payload, "ack": {"id": command["id"], "ok": False, "result": str(command_error)}})
+                    print(time.strftime("%F %T"), "command failed:", command_error)
         except (urllib.error.URLError, KeyError, ValueError, TimeoutError) as error:
             print(time.strftime("%F %T"), "sync failed:", error)
         time.sleep(INTERVAL)

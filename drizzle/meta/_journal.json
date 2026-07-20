@@ -43,6 +43,13 @@
       "when": 1784519681498,
       "tag": "0005_complete_power_pack",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1784519986271,
+      "tag": "0006_thick_cammi",
+      "breakpoints": true
     }
   ]
 }
