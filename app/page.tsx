@@ -79,7 +79,7 @@ export default function Home() {
     <aside className="sidebar">
       <div className="brand"><span className="brand-cube">3D</span><div><strong>层迹</strong><small>PRINT OPS</small></div></div>
       <nav><p className="nav-title">工作空间</p>{nav.map(item => <button key={item.label} className={section===item.label?"nav-active":""} onClick={() => setSection(item.label)}><span>{item.mark}</span>{item.label}{item.label==="打印队列"&&<b>{waiting}</b>}</button>)}</nav>
-      <div className="sidebar-bottom"><div className="system-state"><i/> {loading?"正在同步数据":"数据已同步"}</div><button onClick={() => setSection("系统中心")}>⚙ 系统中心</button><div className="profile"><span>郑</span><div><strong>管理员</strong><small>私有工作区</small></div><em>•••</em></div></div>
+      <div className="sidebar-bottom"><div className="system-state"><i/> {loading?"正在同步数据":"数据已同步"}</div><a className="team-nav-link" href="/team">♙ 员工与权限</a><button onClick={() => setSection("系统中心")}>⚙ 系统中心</button><div className="profile"><span>郑</span><div><strong>管理员</strong><small>私有工作区</small></div><em>•••</em></div></div>
     </aside>
     <section className="content">
       <header className="topbar"><div><p>生产控制台</p><h1>{section}</h1></div><div className="top-actions"><label className="search"><span>⌕</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索当前数据"/></label><button className="icon-btn" aria-label="通知">♢<i/></button>{!(["生产明细","文件资产","设备管理","耗材卷同步","经营分析","良率分析","系统中心"] as Section[]).includes(section)&&<button className="primary" onClick={openCreate}>＋ 新建{section==="概览"?"任务":section}</button>}</div></header>

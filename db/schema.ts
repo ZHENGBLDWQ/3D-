@@ -1,6 +1,10 @@
 import { sql } from "drizzle-orm";
 import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
+export const organizations = sqliteTable("organizations", { id: integer("id").primaryKey({ autoIncrement: true }), name: text("name").notNull(), slug: text("slug").notNull().unique(), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`) });
+export const organizationMembers = sqliteTable("organization_members", { id: integer("id").primaryKey({ autoIncrement: true }), organizationId: integer("organization_id").notNull().references(() => organizations.id), email: text("email").notNull().unique(), displayName: text("display_name").notNull().default(""), role: text("role").notNull().default("operator"), status: text("status").notNull().default("invited"), printerScope: text("printer_scope").notNull().default("[]"), invitedBy: text("invited_by").notNull().default(""), lastLoginAt: text("last_login_at"), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`) });
+export const auditLogs = sqliteTable("audit_logs", { id: integer("id").primaryKey({ autoIncrement: true }), organizationId: integer("organization_id").notNull().references(() => organizations.id), actorEmail: text("actor_email").notNull(), action: text("action").notNull(), resource: text("resource").notNull().default("system"), resourceId: text("resource_id").notNull().default(""), detail: text("detail").notNull().default("{}"), ipAddress: text("ip_address").notNull().default(""), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`) });
+
 export const printItems = sqliteTable("print_items", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   sku: text("sku").notNull().unique(),
