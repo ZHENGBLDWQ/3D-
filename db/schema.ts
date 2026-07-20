@@ -384,3 +384,72 @@ export const spoolmanSpools = sqliteTable("spoolman_spools", {
   ),
   lastSeenAt: text("last_seen_at").notNull(),
 });
+
+export const localGateways = sqliteTable("local_gateways", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  gatewayId: text("gateway_id").notNull().unique(),
+  name: text("name").notNull(),
+  status: text("status").notNull().default("registering"),
+  version: text("version").notNull().default(""),
+  platform: text("platform").notNull().default(""),
+  metadata: text("metadata").notNull().default("{}"),
+  lastSeenAt: text("last_seen_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const gatewayTokens = sqliteTable("gateway_tokens", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  gatewayId: integer("gateway_id").notNull().references(() => localGateways.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  label: text("label").notNull().default(""),
+  expiresAt: text("expires_at"),
+  revokedAt: text("revoked_at"),
+  lastUsedAt: text("last_used_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const printerBindings = sqliteTable("printer_bindings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  gatewayId: integer("gateway_id").notNull().references(() => localGateways.id, { onDelete: "cascade" }),
+  printerId: integer("printer_id").notNull().references(() => printers.id, { onDelete: "cascade" }).unique(),
+  deviceSerial: text("device_serial").notNull().unique(),
+  deviceModel: text("device_model").notNull().default(""),
+  status: text("status").notNull().default("pending"),
+  capabilities: text("capabilities").notNull().default("{}"),
+  boundAt: text("bound_at"),
+  lastSeenAt: text("last_seen_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const printerEvents = sqliteTable("printer_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  bindingId: integer("binding_id").notNull().references(() => printerBindings.id, { onDelete: "cascade" }),
+  printerId: integer("printer_id").notNull().references(() => printers.id, { onDelete: "cascade" }),
+  eventId: text("event_id").notNull().unique(),
+  eventType: text("event_type").notNull(),
+  payload: text("payload").notNull().default("{}"),
+  occurredAt: text("occurred_at").notNull(),
+  receivedAt: text("received_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const backgroundJobs = sqliteTable("background_jobs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  jobKey: text("job_key").notNull().unique(),
+  jobType: text("job_type").notNull(),
+  status: text("status").notNull().default("queued"),
+  payload: text("payload").notNull().default("{}"),
+  result: text("result"),
+  error: text("error"),
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(3),
+  runAfter: text("run_after"),
+  startedAt: text("started_at"),
+  completedAt: text("completed_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
