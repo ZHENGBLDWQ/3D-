@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { getSessionUser } from "./session-auth";
+import { getSessionUser, needsInitialAdminSetup } from "./session-auth";
+import SetupForm from "./setup-form";
+import { ensureDatabaseSchema } from "../db/ensure-schema";
 
 export const dynamic = "force-dynamic";
 
@@ -21,20 +23,22 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  await ensureDatabaseSchema();
   const user = await getSessionUser();
   if (!user) {
+    const needsSetup = await needsInitialAdminSetup();
     return <html lang="zh-CN"><body><main className="signin-shell">
       <section className="signin-card">
         <div className="signin-mark">LT</div>
         <p>LAYERTRACE WORKSPACE</p>
-        <h1>登录 3D 打印管理系统</h1>
-        <span>登录后管理打印机、AMS 耗材、订单、打印队列与生产成本。</span>
-        <form className="signin-form" action="/api/login" method="post">
+        <h1>{needsSetup?"设置你的管理员账号":"登录 3D 打印管理系统"}</h1>
+        <span>{needsSetup?"首次使用，请创建管理员邮箱和密码。完成后只有授权账号可以进入。":"登录后管理打印机、AMS 耗材、订单、打印队列与生产成本。"}</span>
+        {needsSetup?<SetupForm/>:<form className="signin-form" action="/api/login" method="post">
           <label><span>管理员邮箱</span><input name="email" type="email" autoComplete="username" required /></label>
           <label><span>密码</span><input name="password" type="password" autoComplete="current-password" required /></label>
           <button className="signin-button" type="submit">登录系统</button>
-        </form>
-        <small>仅已授权的管理员和员工账号可以进入工作区。</small>
+        </form>}
+        <small>{needsSetup?"邮箱和密码只用于此 LayerTrace 工作区。":"仅已授权的管理员和员工账号可以进入工作区。"}</small>
       </section>
     </main></body></html>;
   }

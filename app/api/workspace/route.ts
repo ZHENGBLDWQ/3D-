@@ -2,9 +2,13 @@ import { desc, eq } from "drizzle-orm";
 import { getD1, getDb } from "../../../db";
 import {
   materialBatches,
+  itemMaterials,
+  orderItems,
   orders,
+  printFiles,
   printItems,
   printJobs,
+  printers,
 } from "../../../db/schema";
 import { requireApiAccess } from "../../api-auth";
 
@@ -139,7 +143,7 @@ export async function GET() {
   try {
     await seedIfEmpty();
     const db = getDb();
-    const [items, materials, orderRows, jobs] = await Promise.all([
+    const [items, materials, orderRows, jobs, printerRows, orderLines, productionFiles, materialRequirements] = await Promise.all([
       db.select().from(printItems).orderBy(desc(printItems.createdAt)),
       db
         .select()
@@ -153,6 +157,8 @@ export async function GET() {
           itemId: printJobs.itemId,
           itemName: printItems.name,
           orderId: printJobs.orderId,
+          printerId: printJobs.printerId,
+          fileId: printJobs.fileId,
           printerName: printJobs.printerName,
           status: printJobs.status,
           progress: printJobs.progress,
@@ -161,11 +167,24 @@ export async function GET() {
           materialDeducted: printJobs.materialDeducted,
           startedAt: printJobs.startedAt,
           completedAt: printJobs.completedAt,
+          plannedStartAt: printJobs.plannedStartAt,
+          expectedCompleteAt: printJobs.expectedCompleteAt,
           createdAt: printJobs.createdAt,
         })
         .from(printJobs)
         .leftJoin(printItems, eq(printJobs.itemId, printItems.id))
         .orderBy(desc(printJobs.createdAt)),
+      db.select().from(printers).orderBy(desc(printers.createdAt)),
+      db.select().from(orderItems),
+      db.select().from(printFiles).orderBy(desc(printFiles.createdAt)),
+      db
+        .select({
+          itemId: itemMaterials.itemId,
+          batchId: itemMaterials.batchId,
+          gramsPerItem: itemMaterials.gramsPerItem,
+          wastePercent: itemMaterials.wastePercent,
+        })
+        .from(itemMaterials),
     ]);
     const d1 = getD1();
     const [
@@ -289,6 +308,10 @@ export async function GET() {
       materials: enrichedMaterials,
       orders: orderRows,
       jobs,
+      printers: printerRows,
+      orderLines,
+      files: productionFiles,
+      itemMaterialRequirements: materialRequirements,
       itemCosts,
     });
   } catch (error) {
@@ -355,13 +378,32 @@ export async function POST(request: Request) {
       return Response.json({ row }, { status: 201 });
     }
     if (payload.entity === "job") {
-      if (!payload.jobNo || !payload.printerName)
+      if (!payload.jobNo || !payload.printerId)
         return Response.json(
-          { error: "任务编号和打印机必填" },
+          { error: "任务编号和关联打印机必填" },
           { status: 400 },
         );
       const itemId = payload.itemId ? Number(payload.itemId) : null;
+      const orderId = payload.orderId ? Number(payload.orderId) : null;
+      const printerId = Number(payload.printerId);
+      const fileId = payload.fileId ? Number(payload.fileId) : null;
       const quantity = Math.max(1, Number(payload.quantity || 1));
+      const [printer] = await db.select({ id: printers.id, name: printers.name, status: printers.status, connectorType: printers.connectorType }).from(printers).where(eq(printers.id, printerId)).limit(1);
+      if (!printer || printer.status === "停用") return Response.json({ error: "所选打印机不存在或已停用" }, { status: 400 });
+      const item = itemId ? (await db.select({ estimatedMinutes: printItems.estimatedMinutes }).from(printItems).where(eq(printItems.id, itemId)).limit(1))[0] : null;
+      if (itemId && !item) return Response.json({ error: "所选打印物品不存在" }, { status: 400 });
+      if (orderId && !(await db.select({ id: orders.id }).from(orders).where(eq(orders.id, orderId)).limit(1)).length) return Response.json({ error: "所选订单不存在" }, { status: 400 });
+      if (orderId && itemId && !(await db.select({ itemId: orderItems.itemId }).from(orderItems).where(eq(orderItems.orderId, orderId))).some((row) => row.itemId === itemId)) return Response.json({ error: "所选物品不属于该订单" }, { status: 400 });
+      if (fileId) {
+        const [file] = await db.select({ itemId: printFiles.itemId, kind: printFiles.kind }).from(printFiles).where(eq(printFiles.id, fileId)).limit(1);
+        if (!file) return Response.json({ error: "所选打印文件不存在" }, { status: 400 });
+        if (itemId && file.itemId && file.itemId !== itemId) return Response.json({ error: "所选文件不属于该打印物品" }, { status: 400 });
+        const allowedKinds = printer.connectorType === "bambu_lan" ? ["3MF", "G-code"] : ["G-code"];
+        if (!allowedKinds.includes(file.kind)) return Response.json({ error: `${printer.name} 不支持 ${file.kind} 文件` }, { status: 400 });
+      }
+      const queue = await getD1().prepare("SELECT COALESCE(SUM(COALESCE(i.estimated_minutes,0)*j.quantity),0) minutes FROM print_jobs j LEFT JOIN print_items i ON i.id=j.item_id WHERE (j.printer_id=? OR (j.printer_id IS NULL AND j.printer_name=?)) AND j.status IN ('排队','打印中','已暂停')").bind(printerId, printer.name).first<{ minutes: number }>();
+      const plannedStartAt = new Date(Date.now() + Number(queue?.minutes || 0) * 60_000).toISOString();
+      const expectedCompleteAt = new Date(new Date(plannedStartAt).getTime() + Number(item?.estimatedMinutes || 0) * quantity * 60_000).toISOString();
       if (itemId) {
         const d1 = getD1();
         const checks = await d1
@@ -391,12 +433,16 @@ export async function POST(request: Request) {
         .values({
           jobNo: String(payload.jobNo),
           itemId,
-          orderId: payload.orderId ? Number(payload.orderId) : null,
-          printerName: String(payload.printerName),
+          orderId,
+          printerId,
+          fileId,
+          printerName: printer.name,
           status: String(payload.status || "排队"),
           progress: Number(payload.progress || 0),
           quantity,
           priority: Number(payload.priority || 3),
+          plannedStartAt,
+          expectedCompleteAt,
         })
         .returning();
       return Response.json({ row }, { status: 201 });

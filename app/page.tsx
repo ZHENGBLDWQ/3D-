@@ -1,7 +1,8 @@
 "use client";
 
-import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
+import { CSSProperties, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import InventoryCenter from "./inventory-center";
+import { DialogProvider, useDialogs } from "./ui-dialogs";
 
 type Section =
   | "概览"
@@ -143,6 +144,8 @@ type Job = {
   itemId: number | null;
   itemName: string | null;
   orderId: number | null;
+  printerId: number | null;
+  fileId: number | null;
   printerName: string;
   status: string;
   progress: number;
@@ -151,34 +154,44 @@ type Job = {
   materialDeducted: boolean;
   startedAt: string | null;
   completedAt: string | null;
+  plannedStartAt: string | null;
+  expectedCompleteAt: string | null;
 };
+type OrderLine = { id:number; orderId:number; itemId:number; quantity:number; unitPrice:number };
+type ItemMaterialRequirement = { itemId:number; batchId:number; gramsPerItem:number; wastePercent:number };
 type WorkspaceData = {
   items: Item[];
   materials: Material[];
   orders: Order[];
   jobs: Job[];
+  printers: Printer[];
+  orderLines: OrderLine[];
+  files: PrintFile[];
+  itemMaterialRequirements: ItemMaterialRequirement[];
   itemCosts: ItemCost[];
 };
 
-const nav: { label: Section; mark: string }[] = [
-  { label: "概览", mark: "⌂" },
-  { label: "经营分析", mark: "▥" },
-  { label: "良率分析", mark: "◎" },
-  { label: "打印物品", mark: "◇" },
-  { label: "耗材库存", mark: "◉" },
-  { label: "耗材卷同步", mark: "◍" },
-  { label: "订单", mark: "▤" },
-  { label: "打印队列", mark: "▷" },
-  { label: "生产明细", mark: "≋" },
-  { label: "文件资产", mark: "▱" },
-  { label: "设备管理", mark: "▣" },
-  { label: "外部任务", mark: "↗" },
+const navGroups: { title: string; items: { label: Section; mark: string }[] }[] = [
+  { title: "工作台", items: [{ label: "概览", mark: "⌂" }, { label: "经营分析", mark: "▥" }, { label: "良率分析", mark: "◎" }] },
+  { title: "业务与生产", items: [{ label: "订单", mark: "▤" }, { label: "打印物品", mark: "◇" }, { label: "打印队列", mark: "▷" }, { label: "生产明细", mark: "≋" }, { label: "外部任务", mark: "↗" }] },
+  { title: "库存与设备", items: [{ label: "耗材库存", mark: "◉" }, { label: "耗材卷同步", mark: "◍" }, { label: "文件资产", mark: "▱" }, { label: "设备管理", mark: "▣" }] },
 ];
+const sectionDescriptions: Record<Section,string> = {
+  概览:"掌握订单、设备、库存和生产风险",经营分析:"查看收入、成本与订单利润",良率分析:"定位失败原因与质量趋势",
+  打印物品:"维护产品档案、工艺与标准成本",耗材库存:"管理仓库、在途、盘点与在机耗材",耗材卷同步:"同步并挂载 Spoolman 耗材卷",
+  订单:"管理客户订单与交付状态",打印队列:"安排任务并跟踪打印进度",生产明细:"关联订单、物品与实际用料",
+  文件资产:"管理 STL、3MF 与 G-code 版本",设备管理:"连接并控制工作室打印机",外部任务:"认领 Bambu Studio 外部任务",
+  系统中心:"检查运行状态、告警与数据备份",
+};
 const emptyData: WorkspaceData = {
   items: [],
   materials: [],
   orders: [],
   jobs: [],
+  printers: [],
+  orderLines: [],
+  files: [],
+  itemMaterialRequirements: [],
   itemCosts: [],
 };
 const entityBySection: Record<
@@ -186,13 +199,17 @@ const entityBySection: Record<
   Entity
 > = { 打印物品: "item", 耗材库存: "material", 订单: "order", 打印队列: "job" };
 
-export default function Home() {
+export default function Home() { return <DialogProvider><HomeWorkspace/></DialogProvider>; }
+
+function HomeWorkspace() {
+  const dialogs = useDialogs();
   const [section, setSection] = useState<Section>("概览");
   const [data, setData] = useState<WorkspaceData>(emptyData);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
   const [modal, setModal] = useState<Entity | null>(null);
+  const todayLabel = useMemo(() => new Intl.DateTimeFormat("zh-CN", { year:"numeric", month:"long", day:"numeric", weekday:"long" }).format(new Date()), []);
 
   async function loadData() {
     try {
@@ -217,10 +234,10 @@ export default function Home() {
       .finally(() => setLoading(false));
   }, []);
 
-  function toast(message: string) {
+  const toast = useCallback((message: string) => {
     setNotice(message);
     window.setTimeout(() => setNotice(""), 2600);
-  }
+  }, []);
   function openCreate() {
     if (
       [
@@ -239,7 +256,7 @@ export default function Home() {
     setModal(section === "概览" ? "job" : entityBySection[section]);
   }
   async function remove(entity: Entity, id: number) {
-    if (!window.confirm("确定删除这条记录吗？此操作不可撤销。")) return;
+    if (!await dialogs.confirm({title:"删除这条记录？",message:"删除后无法撤销，关联数据可能受到影响。",confirmLabel:"确认删除",danger:true})) return;
     const response = await fetch(`/api/workspace?entity=${entity}&id=${id}`, {
       method: "DELETE",
     });
@@ -251,10 +268,7 @@ export default function Home() {
   async function runJobAction(job: Job, action: string) {
     let note = "";
     if (action === "fail") {
-      const reason = window.prompt(
-        "请选择或填写失败原因：\n翘边 / 脱层 / 堵头 / 断料 / 尺寸偏差 / 表面缺陷 / 设备故障 / 其他",
-        "翘边",
-      );
+      const reason = await dialogs.prompt({title:"记录打印失败原因",message:"失败原因将用于良率分析和后续工艺改进。",defaultValue:"翘边",choices:["翘边","脱层","堵头","断料","尺寸偏差","表面缺陷","设备故障","其他"].map(value=>({label:value,value}))});
       if (!reason) return;
       note = reason.trim();
     }
@@ -270,10 +284,7 @@ export default function Home() {
     } else toast(result.error || "任务操作失败");
   }
   async function updateMaterialCost(material: Material) {
-    const value = window.prompt(
-      `设置 ${material.material} ${material.color} 的采购成本（RM/kg）`,
-      String(material.costPerKg || 0),
-    );
+    const value = await dialogs.prompt({title:"更新耗材采购成本",message:`${material.material} · ${material.color}（RM/kg）`,defaultValue:String(material.costPerKg||0),inputType:"number",confirmLabel:"保存成本"});
     if (value === null) return;
     const response = await fetch("/api/workspace", {
       method: "PATCH",
@@ -337,30 +348,18 @@ export default function Home() {
           </div>
         </div>
         <nav>
-          <p className="nav-title">工作空间</p>
-          <a className="main-nav-link" href="/team">
-            <span>♙</span>员工与权限
-          </a>
-          <a className="main-nav-link" href="/fleet">
-            <span>▣</span>打印机中枢
-          </a>
-          {nav.map((item) => (
-            <button
-              key={item.label}
-              className={section === item.label ? "nav-active" : ""}
-              onClick={() => setSection(item.label)}
-            >
-              <span>{item.mark}</span>
-              {item.label}
-              {item.label === "打印队列" && <b>{waiting}</b>}
-            </button>
-          ))}
-          <button
-            className={section === "系统中心" ? "nav-active" : ""}
-            onClick={() => setSection("系统中心")}
-          >
-            <span>⚙</span>系统中心
-          </button>
+          {navGroups.map(group => <div className="nav-group" key={group.title}>
+            <p className="nav-title">{group.title}</p>
+            {group.items.map(item => <button key={item.label} className={section===item.label?"nav-active":""} aria-current={section===item.label?"page":undefined} title={item.label} onClick={()=>setSection(item.label)}>
+              <span>{item.mark}</span><em>{item.label}</em>{item.label==="打印队列"&&waiting>0&&<b>{waiting}</b>}
+            </button>)}
+          </div>)}
+          <div className="nav-group">
+            <p className="nav-title">管理</p>
+            <a className="main-nav-link" href="/team" title="员工与权限"><span>♙</span><em>员工与权限</em></a>
+            <a className="main-nav-link" href="/fleet" title="打印机中枢"><span>▣</span><em>打印机中枢</em></a>
+            <button className={section==="系统中心"?"nav-active":""} aria-current={section==="系统中心"?"page":undefined} title="系统中心" onClick={()=>setSection("系统中心")}><span>⚙</span><em>系统中心</em></button>
+          </div>
         </nav>
         <div className="sidebar-bottom">
           <div className="system-state">
@@ -379,7 +378,7 @@ export default function Home() {
       <section className="content">
         <header className="topbar">
           <div>
-            <p>生产控制台</p>
+            <p>{sectionDescriptions[section]}</p>
             <h1>{section}</h1>
           </div>
           <div className="top-actions">
@@ -418,7 +417,7 @@ export default function Home() {
               <span className="live-dot" />{" "}
               {loading ? "正在读取生产数据" : "实时生产数据"}
             </div>
-            <time>2026年7月20日 · 星期一</time>
+            <time>{todayLabel}</time>
           </div>
           {section === "概览" ? (
             <Dashboard
@@ -499,6 +498,19 @@ function Dashboard({
   onNavigate: (s: Section) => void;
   onAdvance: (j: Job) => void;
 }) {
+  const [systemHealth,setSystemHealth]=useState<SystemData["health"]|null>(null);
+  const [systemAlerts,setSystemAlerts]=useState<SystemData["alerts"]>([]);
+  const [dashboardNow]=useState(()=>Date.now());
+  useEffect(()=>{let active=true;const load=()=>fetch("/api/system",{cache:"no-store"}).then(response=>response.ok?response.json():null).then(result=>{if(active&&result){setSystemHealth(result.health);setSystemAlerts(result.alerts||[])}}).catch(()=>undefined);void load();const timer=window.setInterval(load,30000);return()=>{active=false;window.clearInterval(timer)}},[]);
+  const dueSoon=data.orders.filter(order=>order.dueAt&&order.status!=="已完成"&&new Date(order.dueAt).getTime()<=dashboardNow+2*86400000);
+  const tasks=[
+    ...(dueSoon.length?[{tone:"danger",title:`${dueSoon.length} 个订单临近或已超过交期`,detail:"优先检查排程与交付承诺",section:"订单" as Section}]:[]),
+    ...(metrics.waiting?[{tone:"warning",title:`${metrics.waiting} 个任务正在等待打印`,detail:"检查打印机负载并安排生产",section:"打印队列" as Section}]:[]),
+    ...(metrics.alerts?[{tone:"danger",title:`${metrics.alerts} 项耗材低于安全库存`,detail:"补货、调拨或调整生产计划",section:"耗材库存" as Section}]:[]),
+    ...(systemHealth?.offlinePrinters?[{tone:"danger",title:`${systemHealth.offlinePrinters} 台打印机连接异常`,detail:"检查本地 Agent 与局域网连接",section:"设备管理" as Section}]:[]),
+    ...((systemHealth?.pendingCommands||systemHealth?.failedCommands)?[{tone:"warning",title:"设备命令需要处理",detail:`超时 ${systemHealth?.pendingCommands||0} · 失败 ${systemHealth?.failedCommands||0}`,section:"系统中心" as Section}]:[]),
+    ...(!data.printers.length?[{tone:"info",title:"还没有添加打印机",detail:"建立第一台设备档案后即可安排任务",section:"设备管理" as Section}]:[]),
+  ];
   return (
     <>
       <section className="metrics">
@@ -530,6 +542,14 @@ function Dashboard({
           delta="需要补货"
           accent="red"
         />
+      </section>
+      <section className="today-center panel">
+        <header className="today-center-head"><div><small>TODAY'S PRIORITIES</small><h2>今天需要处理什么</h2><p>{tasks.length?`当前有 ${tasks.length} 类事项需要关注。建议从高风险项目开始。`:"订单、设备与库存运行正常，暂无紧急事项。"}</p></div><button onClick={()=>onNavigate("系统中心")}>查看全部告警 →</button></header>
+        <div className="today-task-grid">
+          {tasks.slice(0,5).map((task,index)=><button className={`today-task ${task.tone}`} key={`${task.title}-${index}`} onClick={()=>onNavigate(task.section)}><i>{task.tone==="danger"?"!":task.tone==="warning"?"△":"+"}</i><span><strong>{task.title}</strong><small>{task.detail}</small></span><b>→</b></button>)}
+          {!tasks.length&&<div className="today-clear"><i>✓</i><span><strong>今日运行平稳</strong><small>系统会持续检查交期、设备连接、任务队列和库存水位。</small></span></div>}
+        </div>
+        {systemAlerts[0]&&<footer className="today-alert-preview"><span>最新告警</span><strong>{systemAlerts[0].title}</strong><p>{systemAlerts[0].detail}</p></footer>}
       </section>
       <section className="main-grid">
         <div className="panel queue-panel">
@@ -1876,6 +1896,7 @@ type SpoolPrinter = {
   activeSpoolExternalId: number | null;
 };
 function SpoolmanInventory({ toast }: { toast: (m: string) => void }) {
+  const dialogs = useDialogs();
   const [spools, setSpools] = useState<SyncedSpool[]>([]);
   const [printers, setPrinters] = useState<SpoolPrinter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1897,16 +1918,8 @@ function SpoolmanInventory({ toast }: { toast: (m: string) => void }) {
       toast("请先添加打印机");
       return;
     }
-    const menu = printers
-      .map(
-        (p, i) =>
-          `${i + 1}. ${p.name}${p.activeSpoolExternalId ? `（当前 #${p.activeSpoolExternalId}）` : ""}`,
-      )
-      .join("\n");
-    const choice = Number(
-      window.prompt(`将耗材卷 #${spool.externalId} 挂载到：\n${menu}`, "1"),
-    );
-    const printer = printers[choice - 1];
+    const choice = await dialogs.prompt({title:`挂载耗材卷 #${spool.externalId}`,message:"选择要使用这卷耗材的打印机。",choices:printers.map(p=>({label:p.name,value:String(p.id),description:p.activeSpoolExternalId?`当前 #${p.activeSpoolExternalId}`:"未挂载耗材"})),confirmLabel:"确认挂载"});
+    const printer = printers.find(p=>p.id===Number(choice));
     if (!printer) return;
     const response = await fetch("/api/spools", {
       method: "PATCH",
@@ -2067,6 +2080,7 @@ function FileAssets({
   data: WorkspaceData;
   toast: (m: string) => void;
 }) {
+  const dialogs = useDialogs();
   const [files, setFiles] = useState<PrintFile[]>([]);
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -2108,7 +2122,7 @@ function FileAssets({
     await load();
   }
   async function remove(id: number) {
-    if (!window.confirm("确定同时删除文件和元数据吗？")) return;
+    if (!await dialogs.confirm({title:"删除打印文件？",message:"文件内容和相关元数据将同时删除，此操作无法撤销。",confirmLabel:"删除文件",danger:true})) return;
     const response = await fetch(`/api/files?id=${id}`, { method: "DELETE" });
     if (response.ok) {
       toast("文件已删除");
@@ -2120,13 +2134,8 @@ function FileAssets({
       toast("请先在设备管理中添加并连接打印机");
       return;
     }
-    const menu = printers
-      .map((p, i) => `${i + 1}. ${p.name}（${p.connectionState}）`)
-      .join("\n");
-    const choice = Number(
-      window.prompt(`选择接收 ${file.filename} 的打印机：\n${menu}`, "1"),
-    );
-    const printer = printers[choice - 1];
+    const choice = await dialogs.prompt({title:"选择接收打印机",message:file.filename,choices:printers.map(p=>({label:p.name,value:String(p.id),description:p.connectionState})),confirmLabel:"加入打印队列"});
+    const printer = printers.find(p=>p.id===Number(choice));
     if (!printer) return;
     const response = await fetch("/api/printers", {
       method: "PATCH",
@@ -2485,6 +2494,7 @@ function ExternalPrintJobs({
 }
 
 function PrinterManager({ toast }: { toast: (m: string) => void }) {
+  const dialogs = useDialogs();
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [saving, setSaving] = useState(false);
   async function load() {
@@ -2534,15 +2544,9 @@ function PrinterManager({ toast }: { toast: (m: string) => void }) {
     } else toast("状态更新失败");
   }
   async function rate(printer: Printer) {
-    const hourlyRate = window.prompt(
-      `设置 ${printer.name} 的设备成本（RM/小时）`,
-      String(printer.hourlyRate || 0),
-    );
+    const hourlyRate = await dialogs.prompt({title:"设置设备小时成本",message:`${printer.name} · RM/小时`,defaultValue:String(printer.hourlyRate||0),inputType:"number",confirmLabel:"下一步"});
     if (hourlyRate === null) return;
-    const powerWatts = window.prompt(
-      `设置 ${printer.name} 的估算功率（W）`,
-      String(printer.powerWatts || 1000),
-    );
+    const powerWatts = await dialogs.prompt({title:"设置设备估算功率",message:`${printer.name} · 瓦特（W）`,defaultValue:String(printer.powerWatts||1000),inputType:"number",confirmLabel:"保存参数"});
     if (powerWatts === null) return;
     const hourly = Number(hourlyRate);
     const watts = Number(powerWatts);
@@ -2570,10 +2574,7 @@ function PrinterManager({ toast }: { toast: (m: string) => void }) {
     } else toast("成本更新失败");
   }
   async function connect(printer: Printer) {
-    const connectorType = window.prompt(
-      "连接类型：bambu_lan、moonraker 或 octoprint",
-      printer.connectorType === "manual" ? "bambu_lan" : printer.connectorType,
-    );
+    const connectorType = await dialogs.prompt({title:"选择打印机连接方式",message:`为 ${printer.name} 生成一次性代理令牌。`,defaultValue:printer.connectorType==="manual"?"bambu_lan":printer.connectorType,choices:[{label:"Bambu LAN",value:"bambu_lan",description:"Bambu Lab 局域网模式"},{label:"Moonraker",value:"moonraker",description:"Klipper 打印机"},{label:"OctoPrint",value:"octoprint",description:"OctoPrint API"}],confirmLabel:"生成令牌"});
     if (!connectorType) return;
     const response = await fetch("/api/printers", {
       method: "PATCH",
@@ -2590,9 +2591,7 @@ function PrinterManager({ toast }: { toast: (m: string) => void }) {
       return;
     }
     await navigator.clipboard.writeText(result.token);
-    window.alert(
-      `代理令牌已复制。请立即保存，关闭后将无法再次查看：\n\n${result.token}${connectorType === "bambu_lan" ? "\n\n本地 Agent 还需设置 BAMBU_HOST、BAMBU_SERIAL、BAMBU_ACCESS_CODE。" : ""}`,
-    );
+    await dialogs.alert({title:"代理令牌已复制",message:`请立即安全保存，关闭后将无法再次查看：\n${result.token}${connectorType==="bambu_lan"?"\nBambu LAN 还需在本地 Agent 设置主机、序列号和访问码。":""}`,confirmLabel:"我已保存"});
     await load();
   }
   async function command(
@@ -2602,7 +2601,7 @@ function PrinterManager({ toast }: { toast: (m: string) => void }) {
     const labels = { pause: "暂停", resume: "继续", cancel: "取消" };
     if (
       name === "cancel" &&
-      !window.confirm(`确定取消 ${printer.name} 当前的打印吗？`)
+      !await dialogs.confirm({title:"取消当前打印？",message:`${printer.name} 将停止当前任务，该操作可能产生报废耗材。`,confirmLabel:"确认取消",danger:true})
     )
       return;
     const response = await fetch("/api/printers", {
@@ -2622,7 +2621,7 @@ function PrinterManager({ toast }: { toast: (m: string) => void }) {
     toast(`${labels[name]}命令已进入安全队列`);
   }
   async function remove(id: number) {
-    if (!window.confirm("确定删除该设备档案吗？")) return;
+    if (!await dialogs.confirm({title:"删除设备档案？",message:"设备历史记录仍会保留，但该设备将不能继续接收命令。",confirmLabel:"删除设备",danger:true})) return;
     const response = await fetch(`/api/printers?id=${id}`, {
       method: "DELETE",
     });
@@ -2827,6 +2826,16 @@ function CreateModal({
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [selectedOrderId,setSelectedOrderId]=useState("");
+  const [selectedItemId,setSelectedItemId]=useState("");
+  const [selectedPrinterId,setSelectedPrinterId]=useState("");
+  const [jobQuantity,setJobQuantity]=useState(1);
+  const orderItemIds=selectedOrderId?new Set(data.orderLines.filter(line=>line.orderId===Number(selectedOrderId)).map(line=>line.itemId)):null;
+  const availableItems=orderItemIds?data.items.filter(item=>orderItemIds.has(item.id)):data.items;
+  const selectedItem=data.items.find(item=>item.id===Number(selectedItemId));
+  const selectedPrinter=data.printers.find(printer=>printer.id===Number(selectedPrinterId));
+  const compatibleFiles=data.files.filter(file=>(!file.itemId||file.itemId===Number(selectedItemId))&&(!selectedPrinter||selectedPrinter.connectorType==="bambu_lan"||file.kind==="G-code"));
+  const requirements=data.itemMaterialRequirements.filter(row=>row.itemId===Number(selectedItemId)).map(row=>{const material=data.materials.find(item=>item.id===row.batchId);const needed=row.gramsPerItem*jobQuantity*(1+row.wastePercent/100);return{...row,material,needed,ready:Number(material?.availableGrams||0)>=needed}});
   const titles = {
     item: "打印物品",
     material: "耗材批次",
@@ -2944,39 +2953,37 @@ function CreateModal({
           {entity === "job" && (
             <>
               <Field name="jobNo" label="任务编号" placeholder="JOB-045" />
-              <Field
-                name="printerName"
-                label="打印机"
-                placeholder="Bambu X1C"
-              />
               <label>
-                <span>打印物品</span>
-                <select name="itemId">
-                  <option value="">暂不关联</option>
-                  {data.items.map((x) => (
-                    <option key={x.id} value={x.id}>
-                      {x.name}
-                    </option>
-                  ))}
+                <span>关联打印机</span>
+                <select name="printerId" required value={selectedPrinterId} onChange={event=>setSelectedPrinterId(event.target.value)}>
+                  <option value="" disabled>{data.printers.length?"请选择打印机":"请先到设备管理添加打印机"}</option>
+                  {data.printers.filter(x=>x.status!=="停用").map(x=><option key={x.id} value={x.id}>{x.name}{x.model?` · ${x.model}`:""} · {x.status}</option>)}
                 </select>
               </label>
               <label>
                 <span>关联订单</span>
-                <select name="orderId">
+                <select name="orderId" value={selectedOrderId} onChange={event=>{const value=event.target.value;setSelectedOrderId(value);if(value&&!data.orderLines.some(line=>line.orderId===Number(value)&&line.itemId===Number(selectedItemId)))setSelectedItemId("")}}>
                   <option value="">暂不关联</option>
                   {data.orders.map((x) => (
                     <option key={x.id} value={x.id}>
-                      {x.orderNo} · {x.customer}
+                      {x.orderNo} · {x.customer} · {x.status}
                     </option>
                   ))}
                 </select>
               </label>
-              <Field
-                name="quantity"
-                label="打印数量"
-                type="number"
-                defaultValue="1"
-              />
+              <label>
+                <span>打印物品</span>
+                <select name="itemId" value={selectedItemId} onChange={event=>setSelectedItemId(event.target.value)}>
+                  <option value="">暂不关联</option>
+                  {availableItems.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.sku} · {x.name} · 预计 {x.estimatedGrams}g
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label><span>打印文件</span><select name="fileId" defaultValue=""><option value="">稍后选择</option>{compatibleFiles.map(file=><option key={file.id} value={file.id}>{file.filename} · {file.kind} · {file.version}</option>)}</select></label>
+              <label><span>打印数量</span><input name="quantity" type="number" min="1" value={jobQuantity} onChange={event=>setJobQuantity(Math.max(1,Number(event.target.value)||1))}/></label>
               <label>
                 <span>优先级</span>
                 <select name="priority" defaultValue="3">
@@ -2986,6 +2993,8 @@ function CreateModal({
                   <option value="4">P4 · 低</option>
                 </select>
               </label>
+              {selectedItem&&<div className="job-link-summary"><div><small>预计生产</small><strong>{selectedItem.estimatedGrams*jobQuantity}g · {selectedItem.estimatedMinutes*jobQuantity} 分钟</strong></div><div><small>计划设备</small><strong>{selectedPrinter?`${selectedPrinter.name} · ${selectedPrinter.status}`:"请选择打印机"}</strong></div></div>}
+              {selectedItem&&<div className="job-material-check"><small>物料可用性</small>{requirements.length?requirements.map(row=><div className={row.ready?"ready":"short"} key={row.batchId}><span>{row.material?`${row.material.material} ${row.material.color}`:`批次 #${row.batchId}`}</span><strong>需要 {row.needed.toFixed(1)}g · 可用 {Number(row.material?.availableGrams||0).toFixed(1)}g</strong><b>{row.ready?"充足":"不足"}</b></div>):<p>该物品尚未配置 BOM，任务可创建但无法自动预留耗材。</p>}</div>}
             </>
           )}
         </div>

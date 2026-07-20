@@ -15,6 +15,63 @@ type InventoryAction =
 async function ensureInventorySchema() {
   const d1 = getD1();
   await d1.batch([
+    d1.prepare(`CREATE TABLE IF NOT EXISTS material_batches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, material TEXT NOT NULL, color TEXT NOT NULL,
+      brand TEXT NOT NULL DEFAULT '', initial_grams REAL NOT NULL, remaining_grams REAL NOT NULL,
+      low_stock_grams REAL NOT NULL DEFAULT 200, cost_per_kg REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`),
+    d1.prepare(`CREATE TABLE IF NOT EXISTS print_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, sku TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT '未分类', estimated_grams REAL NOT NULL DEFAULT 0,
+      estimated_minutes INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`),
+    d1.prepare(`CREATE TABLE IF NOT EXISTS orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, order_no TEXT NOT NULL UNIQUE, customer TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT '待确认', due_at TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`),
+    d1.prepare(`CREATE TABLE IF NOT EXISTS print_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, job_no TEXT NOT NULL UNIQUE, item_id INTEGER, order_id INTEGER,
+      printer_name TEXT NOT NULL, status TEXT NOT NULL DEFAULT '排队', progress INTEGER NOT NULL DEFAULT 0,
+      quantity INTEGER NOT NULL DEFAULT 1, priority INTEGER NOT NULL DEFAULT 3,
+      material_deducted INTEGER NOT NULL DEFAULT 0, started_at TEXT, completed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (item_id) REFERENCES print_items(id), FOREIGN KEY (order_id) REFERENCES orders(id)
+    )`),
+    d1.prepare(`CREATE TABLE IF NOT EXISTS inventory_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, batch_id INTEGER NOT NULL, job_id INTEGER,
+      type TEXT NOT NULL, grams REAL NOT NULL, note TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (batch_id) REFERENCES material_batches(id), FOREIGN KEY (job_id) REFERENCES print_jobs(id)
+    )`),
+    d1.prepare(`CREATE TABLE IF NOT EXISTS item_materials (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER NOT NULL, batch_id INTEGER NOT NULL,
+      grams_per_item REAL NOT NULL, waste_percent REAL NOT NULL DEFAULT 5,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (item_id) REFERENCES print_items(id), FOREIGN KEY (batch_id) REFERENCES material_batches(id)
+    )`),
+    d1.prepare(`CREATE TABLE IF NOT EXISTS printers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, model TEXT NOT NULL DEFAULT '',
+      technology TEXT NOT NULL DEFAULT 'FDM', location TEXT NOT NULL DEFAULT '',
+      nozzle_diameter REAL NOT NULL DEFAULT 0.4, build_volume TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT '空闲', total_hours REAL NOT NULL DEFAULT 0,
+      hourly_rate REAL NOT NULL DEFAULT 0, power_watts REAL NOT NULL DEFAULT 1000,
+      maintenance_due_at TEXT, notes TEXT NOT NULL DEFAULT '', connector_type TEXT NOT NULL DEFAULT 'manual',
+      connector_token_hash TEXT, connection_state TEXT NOT NULL DEFAULT '未连接', last_seen_at TEXT,
+      nozzle_temp REAL, bed_temp REAL, current_file TEXT, remote_progress REAL,
+      active_spool_external_id INTEGER, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`),
+    d1.prepare(`CREATE TABLE IF NOT EXISTS external_print_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, printer_id INTEGER NOT NULL, filename TEXT NOT NULL DEFAULT '',
+      item_id INTEGER, order_id INTEGER, batch_id INTEGER, quantity INTEGER NOT NULL DEFAULT 1,
+      material TEXT NOT NULL DEFAULT '', ams_unit INTEGER, tray_index INTEGER,
+      estimated_grams REAL NOT NULL DEFAULT 0, consumed_grams REAL NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT '待认领', result TEXT NOT NULL DEFAULT '',
+      inventory_deducted INTEGER NOT NULL DEFAULT 0, started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      completed_at TEXT, claimed_at TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (printer_id) REFERENCES printers(id), FOREIGN KEY (item_id) REFERENCES print_items(id),
+      FOREIGN KEY (order_id) REFERENCES orders(id), FOREIGN KEY (batch_id) REFERENCES material_batches(id)
+    )`),
     d1.prepare(`CREATE TABLE IF NOT EXISTS material_inventory_meta (
       batch_id INTEGER PRIMARY KEY,
       sku TEXT NOT NULL UNIQUE,

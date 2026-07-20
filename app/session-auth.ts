@@ -15,11 +15,25 @@ function config() {
 }
 
 async function hmac(value: string) {
-  const { secret } = config();
-  if (!secret) return "";
+  const secret = await getSessionSecret();
   const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const bytes = new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(value)));
   return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function getSessionSecret() {
+  const configured = config().secret;
+  if (configured) return configured;
+  const db = getD1();
+  await db.prepare("CREATE TABLE IF NOT EXISTS app_secrets (name TEXT PRIMARY KEY,value TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+  let row = await db.prepare("SELECT value FROM app_secrets WHERE name='session_secret'").first<{value:string}>();
+  if (!row?.value) {
+    const generated = hex(crypto.getRandomValues(new Uint8Array(32)));
+    await db.prepare("INSERT OR IGNORE INTO app_secrets(name,value) VALUES('session_secret',?)").bind(generated).run();
+    row = await db.prepare("SELECT value FROM app_secrets WHERE name='session_secret'").first<{value:string}>();
+  }
+  if (!row?.value) throw new Error("无法初始化会话密钥");
+  return row.value;
 }
 
 export async function verifyAdminCredentials(email: string, password: string) {
@@ -31,11 +45,43 @@ export async function verifyAdminCredentials(email: string, password: string) {
   return !!member?.passwordHash && member.status !== "disabled" && await verifyPassword(password, member.passwordHash);
 }
 
-async function ensurePasswordColumn() {
-  const columns = await getD1().prepare("PRAGMA table_info(organization_members)").all<{name:string}>();
-  if (!columns.results.some(column => column.name === "password_hash")) {
-    await getD1().prepare("ALTER TABLE organization_members ADD COLUMN password_hash TEXT").run();
+async function ensureAuthSchema() {
+  const db = getD1();
+  await db.batch([
+    db.prepare("CREATE TABLE IF NOT EXISTS organizations (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,slug TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
+    db.prepare("CREATE TABLE IF NOT EXISTS organization_members (id INTEGER PRIMARY KEY AUTOINCREMENT,organization_id INTEGER NOT NULL,email TEXT NOT NULL UNIQUE,display_name TEXT NOT NULL DEFAULT '',role TEXT NOT NULL DEFAULT 'operator',status TEXT NOT NULL DEFAULT 'invited',printer_scope TEXT NOT NULL DEFAULT '[]',invited_by TEXT NOT NULL DEFAULT '',password_hash TEXT,last_login_at TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
+    db.prepare("CREATE TABLE IF NOT EXISTS auth_setup (id INTEGER PRIMARY KEY,owner_email TEXT NOT NULL,completed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
+  ]);
+  const columns = await db.prepare("PRAGMA table_info(organization_members)").all<{name:string}>();
+  if (!columns.results.some((column:{name:string}) => column.name === "password_hash")) {
+    await db.prepare("ALTER TABLE organization_members ADD COLUMN password_hash TEXT").run();
   }
+}
+
+async function ensurePasswordColumn() { await ensureAuthSchema(); }
+
+export async function needsInitialAdminSetup() {
+  const values = config();
+  if (values.emails.length > 0 && values.password) return false;
+  await ensureAuthSchema();
+  const row = await getD1().prepare("SELECT COUNT(*) AS count FROM organization_members WHERE password_hash IS NOT NULL AND password_hash<>''").first<{count:number}>();
+  return Number(row?.count || 0) === 0;
+}
+
+export async function createInitialAdmin(email: string, password: string) {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized.includes("@") || password.length < 10) return false;
+  if (!await needsInitialAdminSetup()) return false;
+  const db = getD1();
+  const claim = await db.prepare("INSERT OR IGNORE INTO auth_setup(id,owner_email) VALUES(1,?)").bind(normalized).run();
+  if (!claim.meta.changes) return false;
+  await db.prepare("INSERT OR IGNORE INTO organizations(name,slug) VALUES(?,?)").bind("LayerTrace 3D 打印工作室","layertrace").run();
+  const organization = await db.prepare("SELECT id FROM organizations WHERE slug='layertrace'").first<{id:number}>();
+  if (!organization) throw new Error("无法创建工作区");
+  const passwordHash = await hashPassword(password);
+  await db.prepare("INSERT INTO organization_members(organization_id,email,display_name,role,status,printer_scope,invited_by,password_hash) VALUES(?,?,?,?,?,'[]',?,?)")
+    .bind(organization.id, normalized, normalized.split("@")[0], "owner", "active", normalized, passwordHash).run();
+  return true;
 }
 
 function hex(bytes: Uint8Array) { return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join(""); }

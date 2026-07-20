@@ -94,6 +94,9 @@ export const printJobs = sqliteTable("print_jobs", {
   jobNo: text("job_no").notNull().unique(),
   itemId: integer("item_id").references(() => printItems.id),
   orderId: integer("order_id").references(() => orders.id),
+  // The D1 migration owns the foreign key because `printers` is declared later in this module.
+  printerId: integer("printer_id"),
+  fileId: integer("file_id"),
   printerName: text("printer_name").notNull(),
   status: text("status").notNull().default("排队"),
   progress: integer("progress").notNull().default(0),
@@ -104,6 +107,8 @@ export const printJobs = sqliteTable("print_jobs", {
     .default(false),
   startedAt: text("started_at"),
   completedAt: text("completed_at"),
+  plannedStartAt: text("planned_start_at"),
+  expectedCompleteAt: text("expected_complete_at"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`CURRENT_TIMESTAMP`),

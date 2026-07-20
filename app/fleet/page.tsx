@@ -1,1 +1,1 @@
-import {requireChatGPTUser} from "../chatgpt-auth";import FleetClient from "./fleet-client";export const dynamic="force-dynamic";export default async function FleetPage(){await requireChatGPTUser("/fleet");return <FleetClient/>}
+import {redirect} from "next/navigation";import {getAccessContext} from "../access-control";import FleetClient from "./fleet-client";export const dynamic="force-dynamic";export default async function FleetPage(){const user=await getAccessContext();if(!user)redirect("/");return <FleetClient/>}

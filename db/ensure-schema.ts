@@ -1,0 +1,59 @@
+import { getD1 } from ".";
+import migration0000 from "../drizzle/0000_neat_the_santerians.sql?raw";
+import migration0001 from "../drizzle/0001_mysterious_nomad.sql?raw";
+import migration0002 from "../drizzle/0002_violet_excalibur.sql?raw";
+import migration0003 from "../drizzle/0003_past_hydra.sql?raw";
+import migration0004 from "../drizzle/0004_lame_blackheart.sql?raw";
+import migration0005 from "../drizzle/0005_complete_power_pack.sql?raw";
+import migration0006 from "../drizzle/0006_thick_cammi.sql?raw";
+import migration0007 from "../drizzle/0007_funny_winter_soldier.sql?raw";
+import migration0008 from "../drizzle/0008_lying_big_bertha.sql?raw";
+import migration0009 from "../drizzle/0009_wet_argent.sql?raw";
+import migration0010 from "../drizzle/0010_cold_starbolt.sql?raw";
+import migration0011 from "../drizzle/0011_gray_scrambler.sql?raw";
+import migration0012 from "../drizzle/0012_handy_mach_iv.sql?raw";
+import migration0013 from "../drizzle/0013_thick_patch.sql?raw";
+import migration0014 from "../drizzle/0014_classy_thor_girl.sql?raw";
+import migration0015 from "../drizzle/0015_mushy_grandmaster.sql?raw";
+import migration0016 from "../drizzle/0016_boring_zarda.sql?raw";
+import migration0017 from "../drizzle/0017_inventory_control.sql?raw";
+import migration0018 from "../drizzle/0018_inventory_printer_stock.sql?raw";
+import migration0019 from "../drizzle/0019_link_jobs_to_printers.sql?raw";
+import migration0020 from "../drizzle/0020_job_production_links.sql?raw";
+
+const migrations = [
+  migration0000,migration0001,migration0002,migration0003,migration0004,
+  migration0005,migration0006,migration0007,migration0008,migration0009,
+  migration0010,migration0011,migration0012,migration0013,migration0014,
+  migration0015,migration0016,migration0017,migration0018,migration0019,migration0020,
+];
+
+let schemaPromise: Promise<void> | null = null;
+
+function isSafeExistingSchemaError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes("already exists") || message.includes("duplicate column name");
+}
+
+async function applyMigrations() {
+  const db = getD1();
+  await db.prepare("CREATE TABLE IF NOT EXISTS layertrace_migrations (id INTEGER PRIMARY KEY,applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+  for (let index=0; index<migrations.length; index++) {
+    const applied = await db.prepare("SELECT id FROM layertrace_migrations WHERE id=?").bind(index).first();
+    if (applied) continue;
+    const statements = migrations[index].split("--> statement-breakpoint").map(statement=>statement.trim()).filter(Boolean);
+    for (const statement of statements) {
+      try {
+        await db.prepare(statement).run();
+      } catch (error) {
+        if (!isSafeExistingSchemaError(error)) throw error;
+      }
+    }
+    await db.prepare("INSERT OR IGNORE INTO layertrace_migrations(id) VALUES(?)").bind(index).run();
+  }
+}
+
+export function ensureDatabaseSchema() {
+  schemaPromise ??= applyMigrations().catch(error=>{schemaPromise=null;throw error;});
+  return schemaPromise;
+}
