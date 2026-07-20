@@ -84,3 +84,20 @@ export const printJobEvents = sqliteTable("print_job_events", {
   note: text("note").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const printFiles = sqliteTable("print_files", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  itemId: integer("item_id").references(() => printItems.id),
+  filename: text("filename").notNull(),
+  objectKey: text("object_key").notNull().unique(),
+  kind: text("kind").notNull(),
+  version: text("version").notNull().default("v1"),
+  sizeBytes: integer("size_bytes").notNull(),
+  contentType: text("content_type").notNull(),
+  printerProfile: text("printer_profile").notNull().default(""),
+  layerHeight: real("layer_height"),
+  infillPercent: real("infill_percent"),
+  estimatedMinutes: integer("estimated_minutes"),
+  notes: text("notes").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
-type Section = "概览" | "打印物品" | "耗材库存" | "订单" | "打印队列" | "生产明细";
+type Section = "概览" | "打印物品" | "耗材库存" | "订单" | "打印队列" | "生产明细" | "文件资产";
 type Entity = "item" | "material" | "order" | "job";
 type Item = { id:number; sku:string; name:string; category:string; estimatedGrams:number; estimatedMinutes:number };
 type Material = { id:number; material:string; color:string; brand:string; initialGrams:number; remainingGrams:number; lowStockGrams:number };
@@ -11,7 +11,7 @@ type Job = { id:number; jobNo:string; itemId:number|null; itemName:string|null; 
 type WorkspaceData = { items:Item[]; materials:Material[]; orders:Order[]; jobs:Job[] };
 
 const nav: { label:Section; mark:string }[] = [
-  { label:"概览", mark:"⌂" }, { label:"打印物品", mark:"◇" }, { label:"耗材库存", mark:"◉" }, { label:"订单", mark:"▤" }, { label:"打印队列", mark:"▷" }, { label:"生产明细", mark:"≋" },
+  { label:"概览", mark:"⌂" }, { label:"打印物品", mark:"◇" }, { label:"耗材库存", mark:"◉" }, { label:"订单", mark:"▤" }, { label:"打印队列", mark:"▷" }, { label:"生产明细", mark:"≋" }, { label:"文件资产", mark:"▱" },
 ];
 const emptyData:WorkspaceData = { items:[], materials:[], orders:[], jobs:[] };
 const entityBySection:Record<"打印物品"|"耗材库存"|"订单"|"打印队列",Entity> = { "打印物品":"item", "耗材库存":"material", "订单":"order", "打印队列":"job" };
@@ -45,7 +45,7 @@ export default function Home() {
   }, []);
 
   function toast(message:string) { setNotice(message); window.setTimeout(() => setNotice(""),2600); }
-  function openCreate() { if(section==="生产明细") return; setModal(section === "概览" ? "job" : entityBySection[section]); }
+  function openCreate() { if(section==="生产明细"||section==="文件资产") return; setModal(section === "概览" ? "job" : entityBySection[section]); }
   async function remove(entity:Entity,id:number) {
     if (!window.confirm("确定删除这条记录吗？此操作不可撤销。")) return;
     const response = await fetch(`/api/workspace?entity=${entity}&id=${id}`, { method:"DELETE" });
@@ -80,10 +80,10 @@ export default function Home() {
       <div className="sidebar-bottom"><div className="system-state"><i/> {loading?"正在同步数据":"数据已同步"}</div><button onClick={() => toast("设置中心将在设备接入阶段开放")}>⚙ 系统设置</button><div className="profile"><span>郑</span><div><strong>管理员</strong><small>私有工作区</small></div><em>•••</em></div></div>
     </aside>
     <section className="content">
-      <header className="topbar"><div><p>生产控制台</p><h1>{section}</h1></div><div className="top-actions"><label className="search"><span>⌕</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索当前数据"/></label><button className="icon-btn" aria-label="通知">♢<i/></button>{section!=="生产明细"&&<button className="primary" onClick={openCreate}>＋ 新建{section==="概览"?"任务":section}</button>}</div></header>
+      <header className="topbar"><div><p>生产控制台</p><h1>{section}</h1></div><div className="top-actions"><label className="search"><span>⌕</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索当前数据"/></label><button className="icon-btn" aria-label="通知">♢<i/></button>{!(["生产明细","文件资产"] as Section[]).includes(section)&&<button className="primary" onClick={openCreate}>＋ 新建{section==="概览"?"任务":section}</button>}</div></header>
       <div className="workspace">
         <div className="date-row"><div><span className="live-dot"/> {loading?"正在读取生产数据":"实时生产数据"}</div><time>2026年7月20日 · 星期一</time></div>
-        {section === "概览" ? <Dashboard data={data} metrics={{printing,waiting,completed,alerts}} onNavigate={setSection} onAdvance={advanceJob}/> : section === "生产明细" ? <ProductionDetails data={data} toast={toast} onWorkspaceChanged={loadData}/> : <Management section={section} filtered={filtered} onDelete={remove} onAction={runJobAction}/>}
+        {section === "概览" ? <Dashboard data={data} metrics={{printing,waiting,completed,alerts}} onNavigate={setSection} onAdvance={advanceJob}/> : section === "生产明细" ? <ProductionDetails data={data} toast={toast} onWorkspaceChanged={loadData}/> : section === "文件资产" ? <FileAssets data={data} toast={toast}/> : <Management section={section} filtered={filtered} onDelete={remove} onAction={runJobAction}/>}
       </div>
     </section>
     {modal ? <CreateModal entity={modal} data={data} onClose={() => setModal(null)} onSaved={async () => { setModal(null); toast("记录已保存"); await loadData(); }}/> : null}
@@ -157,6 +157,18 @@ function JobActions({job,onAction,onDelete}:{job:Job;onAction:(j:Job,a:string)=>
   return <div className="row-actions job-actions">{(actions[job.status]||[]).map(a=><button key={a.key} onClick={()=>onAction(job,a.key)}>{a.label}</button>)}{!["打印中","已暂停"].includes(job.status)&&<button className="danger-link" onClick={onDelete}>删除</button>}</div>;
 }
 
+type PrintFile={id:number;itemId:number|null;itemName:string|null;filename:string;kind:string;version:string;sizeBytes:number;contentType:string;printerProfile:string;layerHeight:number|null;infillPercent:number|null;estimatedMinutes:number|null;notes:string;createdAt:string};
+function FileAssets({data,toast}:{data:WorkspaceData;toast:(m:string)=>void}){
+  const [files,setFiles]=useState<PrintFile[]>([]);const [uploading,setUploading]=useState(false);
+  async function load(){const response=await fetch("/api/files",{cache:"no-store"});const result=await response.json();if(response.ok)setFiles(result.files);else toast(result.error||"文件读取失败");}
+  useEffect(()=>{fetch("/api/files",{cache:"no-store"}).then(r=>r.json().then(v=>({ok:r.ok,v}))).then(({ok,v})=>{if(ok)setFiles(v.files);}).catch(()=>undefined);},[]);
+  async function submit(event:FormEvent<HTMLFormElement>){event.preventDefault();setUploading(true);const response=await fetch("/api/files",{method:"POST",body:new FormData(event.currentTarget)});const result=await response.json();setUploading(false);if(!response.ok){toast(result.error||"上传失败");return;}event.currentTarget.reset();toast("文件已上传");await load();}
+  async function remove(id:number){if(!window.confirm("确定同时删除文件和元数据吗？"))return;const response=await fetch(`/api/files?id=${id}`,{method:"DELETE"});if(response.ok){toast("文件已删除");await load();}else toast("删除失败");}
+  const size=(bytes:number)=>bytes>1024*1024?`${(bytes/1024/1024).toFixed(1)} MB`:`${Math.ceil(bytes/1024)} KB`;
+  return <section className="file-layout"><div className="panel file-upload"><div className="management-hero"><small>MODEL REPOSITORY</small><h2>上传打印文件</h2><p>支持 STL、3MF、G-code 和产品预览图片，单文件最大 100MB</p></div><form className="detail-form" onSubmit={submit}><label className="file-picker"><span>选择文件</span><input type="file" name="file" accept=".stl,.3mf,.gcode,.gco,.png,.jpg,.jpeg,.webp" required/></label><label><span>关联物品</span><select name="itemId"><option value="">暂不关联</option>{data.items.map(x=><option key={x.id} value={x.id}>{x.sku} · {x.name}</option>)}</select></label><Field name="version" label="版本" defaultValue="v1"/><Field name="printerProfile" label="打印机配置" placeholder="例如：Bambu X1C 0.4mm"/><Field name="layerHeight" label="层高（mm）" type="number"/><Field name="infillPercent" label="填充率（%）" type="number"/><Field name="estimatedMinutes" label="预计时长（分钟）" type="number"/><Field name="notes" label="备注" placeholder="切片器、喷嘴或变更说明"/><button className="primary detail-save" disabled={uploading}>{uploading?"上传中…":"上传并保存"}</button></form></div>
+    <div className="panel file-library"><PanelHead eyebrow="FILES & VERSIONS" title="文件库" action="刷新 ↻" onClick={()=>void load()}/><div className="file-cards">{files.map(file=><article className="file-card" key={file.id}><div className={`file-kind ${file.kind==="图片"?"image":""}`}>{file.kind==="图片"?"▧":file.kind==="G-code"?"G":"3D"}</div><div className="file-info"><div><strong>{file.filename}</strong><span>{file.kind} · {file.version}</span></div><p>{file.itemName||"未关联物品"}　·　{size(file.sizeBytes)}</p><small>{file.printerProfile||"未设置打印机配置"}{file.layerHeight?` · ${file.layerHeight}mm`:""}{file.infillPercent?` · 填充 ${file.infillPercent}%`:""}</small></div><div className="file-actions"><a href={`/api/files?download=${file.id}`}>下载</a><button onClick={()=>remove(file.id)}>删除</button></div></article>)}{files.length===0&&<div className="empty-state">还没有文件，先上传一个模型或 G-code。</div>}</div></div></section>;
+}
+
 function CreateModal({entity,data,onClose,onSaved}:{entity:Entity;data:WorkspaceData;onClose:()=>void;onSaved:()=>void}) {
   const [saving,setSaving]=useState(false); const [error,setError]=useState("");
   const titles={item:"打印物品",material:"耗材批次",order:"客户订单",job:"打印任务"};
@@ -169,7 +181,7 @@ function CreateModal({entity,data,onClose,onSaved}:{entity:Entity;data:Workspace
   </div>{error&&<p className="form-error">{error}</p>}<div className="modal-actions"><button type="button" onClick={onClose}>取消</button><button className="primary" disabled={saving}>{saving?"保存中…":"保存记录"}</button></div></form></div>;
 }
 
-function Field({name,label,placeholder,type="text",defaultValue}:{name:string;label:string;placeholder?:string;type?:string;defaultValue?:string}) { const optional=["category","brand","note"].includes(name); return <label><span>{label}</span><input name={name} type={type} step={type==="number"?"any":undefined} placeholder={placeholder} defaultValue={defaultValue} required={!optional}/></label>; }
+function Field({name,label,placeholder,type="text",defaultValue}:{name:string;label:string;placeholder?:string;type?:string;defaultValue?:string}) { const optional=["category","brand","note","notes","printerProfile","layerHeight","infillPercent","estimatedMinutes"].includes(name); return <label><span>{label}</span><input name={name} type={type} step={type==="number"?"any":undefined} placeholder={placeholder} defaultValue={defaultValue} required={!optional}/></label>; }
 function DataTable({heads,rows}:{heads:string[];rows:(string|React.ReactNode)[][]}) { return <div className="table-wrap"><table><thead><tr>{heads.map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{rows.map((row,i)=><tr key={i}>{row.map((cell,j)=><td key={j}>{cell}</td>)}</tr>)}</tbody></table></div>; }
 function Metric({label,value,unit,delta,accent}:{label:string;value:string;unit:string;delta:string;accent:string}) { return <article className={`metric ${accent}`}><div><p>{label}</p><strong>{value}<small>{unit}</small></strong><span>{delta}</span></div><div className="spark"><i/><i/><i/><i/><i/></div></article>; }
 function PanelHead({eyebrow,title,action,onClick}:{eyebrow:string;title:string;action:string;onClick:()=>void}) { return <div className="panel-head"><div><small>{eyebrow}</small><h2>{title}</h2></div><button onClick={onClick}>{action}</button></div>; }
