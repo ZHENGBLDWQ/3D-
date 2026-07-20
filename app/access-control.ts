@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { headers } from "next/headers";
 import { getD1 } from "../db";
-import { getChatGPTUser } from "./chatgpt-auth";
+import { getSessionUser as getChatGPTUser } from "./session-auth";
 export const ROLES=["owner","manager","orders","operator","warehouse","finance","viewer"] as const; export type Role=typeof ROLES[number]; export type Permission="read"|"write"|"team.manage"|"printers.control"|"inventory.write"|"finance.read";
 const grants:Record<Role,Permission[]>={owner:["read","write","team.manage","printers.control","inventory.write","finance.read"],manager:["read","write","printers.control","inventory.write","finance.read"],orders:["read","write"],operator:["read","printers.control"],warehouse:["read","inventory.write"],finance:["read","finance.read"],viewer:["read"]};
 export type AccessContext={email:string;displayName:string;organizationId:number;role:Role;printerScope:number[]};

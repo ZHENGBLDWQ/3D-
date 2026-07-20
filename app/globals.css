@@ -71,6 +71,10 @@ nav .nav-active span { color:#ff7b4f; }
 .signin-card p{margin:0 0 12px;color:#a9c7ba;font-size:12px;font-weight:800;letter-spacing:.16em}
 .signin-card h1{margin:0;font-size:clamp(30px,6vw,42px);line-height:1.12;letter-spacing:-.04em}
 .signin-card>span{display:block;margin:18px 0 30px;color:#bdd0c8;line-height:1.7}
+.signin-form{display:grid;gap:16px}
+.signin-form label{display:grid;gap:8px;color:#cfe0d9;font-size:13px;font-weight:700}
+.signin-form input{width:100%;box-sizing:border-box;padding:14px 15px;border:1px solid rgba(255,255,255,.14);border-radius:12px;background:#0d1d18;color:#fff;font:inherit;outline:none}
+.signin-form input:focus{border-color:#d8ff78;box-shadow:0 0 0 3px rgba(216,255,120,.12)}
 .signin-button{display:block;padding:15px 20px;border-radius:14px;background:#d8ff78;color:#122019;text-align:center;font-weight:800;text-decoration:none;transition:transform .18s ease,box-shadow .18s ease}
 .signin-button:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(216,255,120,.18)}
 .signin-button:focus-visible{outline:3px solid #fff;outline-offset:3px}

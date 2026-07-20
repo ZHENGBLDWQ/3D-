@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { chatGPTSignInPath, getChatGPTUser } from "./chatgpt-auth";
+import { getSessionUser } from "./session-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const user = await getChatGPTUser();
+  const user = await getSessionUser();
   if (!user) {
     return <html lang="zh-CN"><body><main className="signin-shell">
       <section className="signin-card">
@@ -29,7 +29,11 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <p>LAYERTRACE WORKSPACE</p>
         <h1>登录 3D 打印管理系统</h1>
         <span>登录后管理打印机、AMS 耗材、订单、打印队列与生产成本。</span>
-        <a className="signin-button" href={chatGPTSignInPath("/")}>使用 ChatGPT 账号登录</a>
+        <form className="signin-form" action="/api/login" method="post">
+          <label><span>管理员邮箱</span><input name="email" type="email" autoComplete="username" required /></label>
+          <label><span>密码</span><input name="password" type="password" autoComplete="current-password" required /></label>
+          <button className="signin-button" type="submit">登录系统</button>
+        </form>
         <small>仅已授权的管理员和员工账号可以进入工作区。</small>
       </section>
     </main></body></html>;
