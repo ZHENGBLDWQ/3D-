@@ -92,6 +92,13 @@
       "when": 1784526769080,
       "tag": "0012_handy_mach_iv",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1784528544539,
+      "tag": "0013_thick_patch",
+      "breakpoints": true
     }
   ]
 }

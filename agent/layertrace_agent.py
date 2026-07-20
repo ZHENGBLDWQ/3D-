@@ -6,6 +6,8 @@ import ssl
 import struct
 import ftplib
 import io
+import zipfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 import time
 import urllib.error
@@ -26,6 +28,27 @@ BAMBU_HOST = os.environ.get("BAMBU_HOST", "")
 BAMBU_SERIAL = os.environ.get("BAMBU_SERIAL", "")
 BAMBU_ACCESS_CODE = os.environ.get("BAMBU_ACCESS_CODE", "")
 
+def discover_bambu(timeout=4):
+    message = "\r\n".join(["M-SEARCH * HTTP/1.1","HOST: 239.255.255.250:1900",'MAN: "ssdp:discover"',"MX: 2","ST: urn:bambulab-com:device:3dprinter:1","",""]).encode()
+    found = []
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    sock.settimeout(.5)
+    sock.sendto(message, ("239.255.255.250", 1900))
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try: data, address = sock.recvfrom(8192)
+        except socket.timeout: continue
+        headers = {}
+        for line in data.decode("utf-8", "ignore").splitlines()[1:]:
+            if ":" in line:
+                key, value = line.split(":", 1)
+                headers[key.strip().lower()] = value.strip()
+        serial = headers.get("usn", "").split("::", 1)[0].replace("uuid:", "")
+        found.append({"host":address[0],"serial":serial,"name":headers.get("devname.bambu.com", "Bambu Lab"),"model":headers.get("devmodel.bambu.com", "")})
+    sock.close()
+    unique = {(item["host"], item["serial"]):item for item in found}
+    return list(unique.values())
+
 def mqtt_length(value):
     out = bytearray()
     while True:
@@ -42,8 +65,12 @@ def mqtt_string(value):
 class BambuMqtt:
     """Minimal MQTT 3.1.1 TLS client for Bambu LAN developer mode."""
     def __init__(self, host, serial, access_code):
+        if (not host or not serial) and access_code:
+            devices = discover_bambu()
+            selected = next((item for item in devices if not serial or item["serial"] == serial), None)
+            if selected: host, serial = selected["host"], selected["serial"]
         if not host or not serial or not access_code:
-            raise ValueError("BAMBU_HOST、BAMBU_SERIAL 和 BAMBU_ACCESS_CODE 必须设置")
+            raise ValueError("未自动发现打印机；请设置 BAMBU_HOST、BAMBU_SERIAL 和 BAMBU_ACCESS_CODE")
         self.host, self.serial, self.access_code = host, serial, access_code
         self.sock = None
         self.last = {}
@@ -139,6 +166,40 @@ def bambu_upload_and_start(client, filename, content, plate_index=0):
     ftp.quit()
     client.publish({"print":{"sequence_id":"0","command":"project_file","param":f"Metadata/plate_{plate_index + 1}.gcode","subtask_name":filename,"plate_idx":plate_index,"url":f"file:///sdcard/{remote}","timelapse":False,"bed_leveling":True,"flow_cali":False,"vibration_cali":True,"layer_inspect":False,"use_ams":True}})
 
+def estimate_3mf_grams(content):
+    total = 0.0
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            candidates = [name for name in archive.namelist() if name.lower().endswith("slice_info.config")]
+            for name in candidates:
+                root = ET.fromstring(archive.read(name))
+                for element in root.iter():
+                    for key in ("used_g", "weight", "filament_weight"):
+                        try: total += max(0.0, float(element.attrib.get(key, 0)))
+                        except (TypeError, ValueError): pass
+    except (zipfile.BadZipFile, KeyError, ET.ParseError):
+        return 0.0
+    return round(total, 2)
+
+def bambu_usage_event(payload):
+    state = load_usage_state()
+    job = state.get("bambuJob")
+    active = next((slot for slot in payload.get("ams", []) if slot.get("active")), {})
+    if payload.get("state") == "printing" and not job:
+        pending = state.get("bambuPending", {})
+        job = {"filename":payload.get("filename") or pending.get("filename", ""),"estimatedGrams":pending.get("estimatedGrams", 0),"startedAt":time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),"material":active.get("material", ""),"unit":active.get("unit"),"tray":active.get("tray")}
+        state["bambuJob"] = job
+        save_usage_state(state)
+    elif job and payload.get("state") in ("online", "error"):
+        progress = max(0.0, min(100.0, float(payload.get("progress") or 0)))
+        consumed = float(job.get("estimatedGrams", 0)) * (1 if payload.get("state") == "online" else progress / 100)
+        event = {**job,"consumedGrams":round(consumed,2),"result":"完成" if payload.get("state") == "online" else "失败","completedAt":time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        state.pop("bambuJob", None)
+        state.pop("bambuPending", None)
+        save_usage_state(state)
+        return event
+    return None
+
 def request_json(url, method="GET", data=None, headers=None):
     body = json.dumps(data).encode() if data is not None else None
     req = urllib.request.Request(url, data=body, method=method, headers={"Content-Type": "application/json", **(headers or {})})
@@ -219,6 +280,9 @@ def execute_command(command, bambu=None):
         filename = os.path.basename(payload["filename"])
         content = download_file(payload["fileId"], command["id"])
         if CONNECTOR == "bambu_lan":
+            state = load_usage_state()
+            state["bambuPending"] = {"filename":filename,"estimatedGrams":estimate_3mf_grams(content)}
+            save_usage_state(state)
             bambu_upload_and_start(bambu, filename, content, int(payload.get("plateIndex", 0)))
         elif CONNECTOR == "moonraker":
             upload_file(f"{PRINTER_URL}/server/files/upload", filename, content)
@@ -246,6 +310,9 @@ def main():
     while True:
         try:
             payload = moonraker_status() if CONNECTOR == "moonraker" else bambu_status(bambu) if CONNECTOR == "bambu_lan" else octoprint_status()
+            if CONNECTOR == "bambu_lan":
+                usage = bambu_usage_event(payload)
+                if usage: payload["usage"] = usage
             if SPOOLMAN_URL and time.time() - last_spool_sync >= SPOOLMAN_INTERVAL:
                 try:
                     payload["spools"] = spoolman_spools()

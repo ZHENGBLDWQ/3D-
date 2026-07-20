@@ -1,0 +1,20 @@
+services:
+  bambu-agent:
+    build: ../agent
+    restart: unless-stopped
+    network_mode: host
+    env_file: .env
+    volumes:
+      - ./data:/opt/layertrace/data
+    environment:
+      LAYERTRACE_STATE_FILE: /opt/layertrace/data/agent-state.json
+      PRINTER_CONNECTOR: bambu_lan
+
+  camera-gateway:
+    image: alexxit/go2rtc:latest
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./go2rtc.yaml:/config/go2rtc.yaml:ro
+    command: ["-config", "/config/go2rtc.yaml"]
+

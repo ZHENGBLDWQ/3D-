@@ -146,6 +146,20 @@ export const bambuAmsSlots = sqliteTable("bambu_ams_slots", {
   lastSeenAt: text("last_seen_at").notNull(),
 });
 
+export const bambuMaterialUsage = sqliteTable("bambu_material_usage", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  printerId: integer("printer_id").notNull().references(() => printers.id),
+  filename: text("filename").notNull().default(""),
+  material: text("material").notNull().default(""),
+  amsUnit: integer("ams_unit"),
+  trayIndex: integer("tray_index"),
+  estimatedGrams: real("estimated_grams").notNull().default(0),
+  consumedGrams: real("consumed_grams").notNull().default(0),
+  result: text("result").notNull().default("完成"),
+  startedAt: text("started_at"),
+  completedAt: text("completed_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const printerCommands = sqliteTable("printer_commands", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   printerId: integer("printer_id").notNull().references(() => printers.id),

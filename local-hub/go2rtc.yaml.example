@@ -1,0 +1,7 @@
+api:
+  listen: ":1984"
+webrtc:
+  listen: ":8555"
+streams:
+  bambu_x1: "rtsps://bblp:替换为LAN访问码@192.168.1.80:322/streaming/live/1"
+

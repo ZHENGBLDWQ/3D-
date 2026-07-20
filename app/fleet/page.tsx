@@ -1,0 +1,1 @@
+import {requireChatGPTUser} from "../chatgpt-auth";import FleetClient from "./fleet-client";export const dynamic="force-dynamic";export default async function FleetPage(){await requireChatGPTUser("/fleet");return <FleetClient/>}
