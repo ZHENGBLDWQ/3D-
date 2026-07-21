@@ -54,3 +54,7 @@ class LocalCredentialStore(CredentialStore):
         values = self._read(); existed = values.pop(device_id, None) is not None
         if existed: self._write(values)
         return existed
+
+    def has_access_code(self, device_id):
+        """Checks presence without decrypting or exposing the secret."""
+        return device_id in self._read()

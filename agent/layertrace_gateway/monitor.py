@@ -7,6 +7,7 @@ from __future__ import annotations
 from hashlib import sha256
 import json
 from pathlib import Path
+from threading import RLock
 import time
 from typing import Callable
 
@@ -17,16 +18,18 @@ STATES = {"RUNNING": "printing", "PAUSE": "paused", "IDLE": "idle", **TERMINAL}
 
 class DurableEventOutbox:
     """Append-before-send outbox; acknowledged events are removed atomically."""
-    def __init__(self, path: str | Path): self.path = Path(path)
+    def __init__(self, path: str | Path): self.path, self._lock = Path(path), RLock()
     def load(self) -> list[dict]:
-        try: return json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, ValueError): return []
+        with self._lock:
+            try: return json.loads(self.path.read_text(encoding="utf-8"))
+            except (OSError, ValueError): return []
     def append(self, event: dict) -> None:
-        events = self.load()
-        if not any(item.get("id") == event.get("id") for item in events): events.append(event)
-        self._write(events)
+        with self._lock:
+            events = self.load()
+            if not any(item.get("id") == event.get("id") for item in events): events.append(event)
+            self._write(events)
     def acknowledge(self, event_ids: set[str]) -> None:
-        self._write([event for event in self.load() if event.get("id") not in event_ids])
+        with self._lock: self._write([event for event in self.load() if event.get("id") not in event_ids])
     def _write(self, events: list[dict]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix(self.path.suffix + ".tmp")
