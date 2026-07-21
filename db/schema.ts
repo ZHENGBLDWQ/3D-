@@ -503,3 +503,12 @@ export const slicingJobs = sqliteTable("slicing_jobs", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+export const preflightRuns = sqliteTable("preflight_runs", {
+  id: integer("id").primaryKey({ autoIncrement: true }), organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  runId: text("run_id").notNull().unique(), printerId: integer("printer_id").notNull().references(() => printers.id), level: text("level").notNull(),
+  dispatchAllowed: integer("dispatch_allowed",{mode:"boolean"}).notNull().default(false), overrideAllowed: integer("override_allowed",{mode:"boolean"}).notNull().default(false),
+  input: text("input").notNull(), evaluatedAt: text("evaluated_at").notNull(), createdBy: text("created_by").notNull(), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+export const preflightChecks = sqliteTable("preflight_checks", {id:integer("id").primaryKey({autoIncrement:true}),runId:integer("run_id").notNull().references(()=>preflightRuns.id,{onDelete:"cascade"}),code:text("code").notNull(),category:text("category").notNull(),level:text("level").notNull(),message:text("message").notNull(),details:text("details").notNull().default("{}"),resolutionActions:text("resolution_actions").notNull().default("[]")});
+export const preflightOverrides = sqliteTable("preflight_overrides", {id:integer("id").primaryKey({autoIncrement:true}),runId:integer("run_id").notNull().references(()=>preflightRuns.id,{onDelete:"cascade"}),actorEmail:text("actor_email").notNull(),reason:text("reason").notNull(),createdAt:text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`)});
+export const dispatchAttempts = sqliteTable("dispatch_attempts", {id:integer("id").primaryKey({autoIncrement:true}),runId:integer("run_id").notNull().references(()=>preflightRuns.id,{onDelete:"cascade"}),printerId:integer("printer_id").notNull().references(()=>printers.id),allowed:integer("allowed",{mode:"boolean"}).notNull().default(false),reason:text("reason").notNull().default(""),actorEmail:text("actor_email").notNull(),createdAt:text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`)});

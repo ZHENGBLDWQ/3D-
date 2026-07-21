@@ -19,3 +19,31 @@ export interface PreflightResult {
   evaluatedAt: string;
   dataFreshAt?: string;
 }
+
+export interface PreflightMaterialRequirement {
+  slot: string;
+  material: string;
+  slicedGrams: number;
+  purgeGrams?: number;
+  safetyPercent?: number;
+  minimumReserveGrams?: number;
+}
+
+export interface PreflightMaterialSlot {
+  slot: string;
+  material: string;
+  remainingGrams?: number;
+  observedAt?: string;
+}
+
+export interface PreflightInput {
+  runId?: string;
+  file: { complete: boolean; sliced: boolean; printerModel: string; nozzleMm: number; buildPlate: string };
+  printer: { id: number; model: string; nozzleMm: number; buildPlate: string; online: boolean; fault?: string; observedAt?: string };
+  materialRequirements: PreflightMaterialRequirement[];
+  materialSlots: PreflightMaterialSlot[];
+  order: { valid: boolean; reason?: string };
+  permission: { canDispatch: boolean; canOverride?: boolean };
+  freshnessMinutes?: number;
+  now?: string;
+}

@@ -5,3 +5,4 @@ export * from "./jobs";
 export * from "./slicing";
 export * from "./preflight";
 export * from "./printer";
+export * from "../../preflight/evaluate";
