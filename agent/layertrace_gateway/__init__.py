@@ -5,6 +5,7 @@ from .secrets import CredentialStore, LocalCredentialStore
 
 __all__ = ["BambuDiscovery", "CredentialStore", "DiscoveredPrinter", "LocalCredentialStore", "PrinterConnectionRegistry", "deduplicate", "parse_ssdp_response"]
 from .ams import normalize_ams
+from .monitor import BambuMonitorAdapter, DurableEventOutbox
 from .mqtt import MultiPrinterMqttManager
 
-__all__ = ["MultiPrinterMqttManager", "normalize_ams"]
+__all__ = ["MultiPrinterMqttManager", "normalize_ams", "BambuMonitorAdapter", "DurableEventOutbox"]

@@ -14,7 +14,6 @@ from .secrets import CredentialStore
 class MqttTransport(Protocol):
     def connect(self, host: str, username: str, password: str) -> None: ...
     def subscribe(self, topic: str, callback: Callable[[dict], None]) -> None: ...
-    def publish(self, topic: str, payload: dict) -> None: ...
     def close(self) -> None: ...
 
 @dataclass(slots=True)
@@ -67,11 +66,6 @@ class MultiPrinterMqttManager:
         session.attempts += 1
         delay = min(self.max_delay, self.base_delay * (2 ** (session.attempts - 1)))
         session.next_retry_at = self.clock() + delay * (1 + self.jitter * self.rng())
-
-    def publish(self, device_id: str, payload: dict) -> None:
-        session = self.sessions[device_id]
-        if not session.connected or not session.transport: raise ConnectionError("printer is offline")
-        session.transport.publish(f"device/{session.serial}/request", payload)
 
     def close(self) -> None:
         for session in self.sessions.values():

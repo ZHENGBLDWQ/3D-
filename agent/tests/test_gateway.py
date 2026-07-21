@@ -4,6 +4,8 @@ from layertrace_gateway.registry import PrinterConnectionRegistry
 from layertrace_gateway.secrets import CredentialStore
 from layertrace_gateway.mqtt import MultiPrinterMqttManager
 from layertrace_gateway.ams import normalize_ams
+from layertrace_gateway.monitor import BambuMonitorAdapter, DurableEventOutbox
+import tempfile
 
 class MemoryCredentials(CredentialStore):
     def __init__(self): self.values = {}
@@ -81,6 +83,29 @@ class GatewayTests(unittest.TestCase):
     def test_normalizes_and_deduplicates_ams_slots(self):
         report = {"print":{"ams":{"tray_now":"1","ams":[{"id":"0","tray":[{"id":"1","tray_type":"pla","tray_color":"ff0000ff","remain":44},{"id":"1","remain":1}]}]}}}
         slots = normalize_ams(report)
-        self.assertEqual(slots, [{"unit":0,"slot":1,"material":"PLA","colorHex":"#FF0000","remainingPercent":44.0,"active":True}])
+        self.assertEqual(slots, [{"unit":0,"slot":1,"feedKind":"ams","toolhead":"main","material":"PLA","colorHex":"#FF0000","tagUid":None,"remainingPercent":44.0,"active":True}])
+
+    def test_monitor_adapter_emits_idempotent_session_without_control_surface(self):
+        events=[]; adapter=BambuMonitorAdapter(7,"SERIAL",events.append,clock=lambda:100)
+        first=adapter.observe({"print":{"gcode_state":"RUNNING","subtask_name":"part.3mf","subtask_id":"task-1","mc_percent":3}})
+        second=adapter.observe({"print":{"gcode_state":"RUNNING","subtask_name":"part.3mf","subtask_id":"task-1","mc_percent":4}})
+        sessions=[event for event in first+second if event["type"]=="print.session"]
+        self.assertEqual(len(sessions),1)
+        self.assertEqual(sessions[0]["data"]["source"],"bambu_studio")
+        self.assertFalse(hasattr(adapter,"publish"))
+
+    def test_external_and_auxiliary_feeds_are_normalized(self):
+        report={"print":{"ams":{"tray_now":"255","ams":[],"vt_tray":{"tray_type":"PETG","tray_color":"112233ff","remain":50}},"auxiliary_tray":{"tray_type":"SUPPORT","active":True}}}
+        slots=normalize_ams(report)
+        self.assertEqual(slots[0]["feedKind"],"external")
+        self.assertEqual(slots[1]["toolhead"],"auxiliary")
+
+    def test_durable_outbox_replays_unacknowledged_events(self):
+        with tempfile.TemporaryDirectory() as folder:
+            outbox=DurableEventOutbox(f"{folder}/events.json")
+            outbox.append({"id":"one"});outbox.append({"id":"one"});outbox.append({"id":"two"})
+            self.assertEqual([item["id"] for item in outbox.load()],["one","two"])
+            outbox.acknowledge({"one"})
+            self.assertEqual(outbox.load(),[{"id":"two"}])
 
 if __name__ == "__main__": unittest.main()
