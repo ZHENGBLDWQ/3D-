@@ -48,8 +48,8 @@ export async function GET(){
       ps.filename,ps.status sessionStatus,p.name printerName,s.spool_code spoolCode
       FROM print_material_usage_lines u JOIN print_sessions ps ON ps.id=u.print_session_id AND ps.organization_id=u.organization_id JOIN printers p ON p.id=ps.printer_id
       LEFT JOIN material_spools s ON s.id=u.spool_id AND s.organization_id=u.organization_id WHERE u.organization_id=? ORDER BY ps.last_observed_at DESC,u.id DESC LIMIT 100`).bind(org).all(),
-    db.prepare(`SELECT f.id,f.printer_id printerId,p.name printerName,f.ams_unit amsUnit,f.slot_index slotIndex,f.feed_kind feedKind,f.toolhead,'' material,'' colorHex,NULL remainingPercent,0 active,f.updated_at lastSeenAt
-      FROM printer_feed_positions f JOIN printers p ON p.id=f.printer_id
+    db.prepare(`SELECT f.id,f.printer_id printerId,p.name printerName,f.ams_unit amsUnit,f.slot_index slotIndex,f.feed_kind feedKind,f.toolhead,a.id telemetrySlotId,COALESCE(a.material,'') material,COALESCE(a.color_hex,'') colorHex,a.remaining_percent remainingPercent,COALESCE(a.tag_uid,'') tagUid,COALESCE(a.active,0) active,COALESCE(a.last_seen_at,f.updated_at) lastSeenAt
+      FROM printer_feed_positions f JOIN printers p ON p.id=f.printer_id LEFT JOIN bambu_ams_slots a ON a.printer_id=f.printer_id AND ((f.feed_kind<>'external' AND a.ams_unit=COALESCE(f.ams_unit,0) AND a.tray_index=COALESCE(f.slot_index,0)) OR (f.feed_kind='external' AND a.ams_unit=CASE WHEN f.toolhead='auxiliary' THEN 254 ELSE 255 END))
       WHERE f.organization_id=? AND f.active=1 AND NOT EXISTS(SELECT 1 FROM spool_bindings b WHERE b.organization_id=f.organization_id AND b.feed_position_id=f.id AND b.status='active')
       ORDER BY p.name,f.toolhead,f.ams_unit,f.slot_index`).bind(org).all(),
     db.prepare(`SELECT po.id,po.purchase_no purchaseNo,po.status,s.name supplierName,COALESCE(SUM(i.ordered_grams-i.received_grams),0) incomingGrams

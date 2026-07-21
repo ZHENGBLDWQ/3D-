@@ -66,3 +66,11 @@ test("material catalog master data drives shared color and AMS metadata",async()
  for(const label of ["耗材目录与颜色主数据","新增耗材目录","官方色号","真实色值 HEX","AMS兼容性"]){assert.match(page,new RegExp(label),label)}
  assert.match(page,/tagText/);assert.match(css,/catalog-master-list/);
 });
+
+test("unbound Bambu feeds expose telemetry candidates without guessing a spool deduction",async()=>{
+ const [api,page,css]=await Promise.all([read("app/api/inventory-v2/route.ts"),read("app/inventory/inventory-v2-client.tsx"),read("app/inventory/ams-matching.css")]);
+ assert.match(api,/LEFT JOIN bambu_ams_slots/);assert.match(api,/a\.tag_uid/);assert.match(api,/a\.remaining_percent/);assert.match(api,/f\.toolhead='auxiliary' THEN 254 ELSE 255/);
+ assert.match(page,/function slotSuggestion/);assert.match(page,/RFID已识别/);assert.match(page,/confidence:"高"/);assert.match(page,/置信度/);assert.match(page,/最终必须扫码确认/);
+ assert.match(page,/openIssue\(slot\)/);assert.match(page,/issuePositionId/);assert.match(page,/仅供核对/);assert.match(css,/ams-detection-list/);
+ assert.doesNotMatch(api,/UPDATE material_spools[\s\S]{0,250}bambu_ams_slots/);
+});
