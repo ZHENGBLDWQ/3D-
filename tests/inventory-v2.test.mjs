@@ -14,6 +14,9 @@ test("inventory v2 API scopes every domain read and write to the active organiza
 test("issue and return move a serialized spool without reducing organization assets",async()=>{
  const api=await read("app/api/inventory-v2/route.ts");
  assert.match(api,/action==="issue"/);assert.match(api,/action==="return"/);
+ assert.match(api,/\["sealed","open_storage"\]\.includes\(row\.state\)/);
+ assert.doesNotMatch(api,/\["sealed","open_storage","needs_count"\]/);
+ assert.match(api,/历史库存尚未完成实物盘点，不能领用/);
  assert.match(api,/state='in_use'/);assert.match(api,/state=CASE WHEN remaining_net_grams<=0 THEN 'empty' ELSE 'open_storage'/);
  assert.match(api,/net_grams_delta,idempotency_key[\s\S]+VALUES\(\?,\?,'issue',\?,\?,0/);
  assert.match(api,/组织资产不减少/);
@@ -31,4 +34,12 @@ test("inventory hub exposes the fixed warehouse and in-use operating areas",asyn
  for(const label of ["库存管理","未拆封库存","低库存与补货","采购在途","库存流水","使用中","已开封周转","实时预留与任务结算","辅助工具头","外置料盘"]){assert.match(page,new RegExp(label),label)}
  assert.match(page,/href="\/procurement"/);assert.match(page,/action:"weigh"|value="weigh"/);assert.match(page,/action:"loss"|value="loss"/);assert.match(page,/action:"scrap"|value="scrap"/);
  assert.match(css,/@media\(max-width:700px\)/);
+});
+
+test("legacy aggregate placeholders are isolated from sealed inventory and issue choices",async()=>{
+ const page=await read("app/inventory/inventory-v2-client.tsx");
+ assert.match(page,/const sealed=useMemo\(\(\)=>data\?\.spools\.filter\(s=>s\.state==="sealed"\)/);
+ assert.match(page,/legacy=useMemo\(\(\)=>data\?\.spools\.filter\(s=>s\.state==="needs_count"\)/);
+ assert.match(page,/完成实物盘点并登记实体卷前不可领用/);
+ assert.match(page,/\[\.\.\.open,\.\.\.sealed\]\.map/);
 });
