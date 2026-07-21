@@ -469,3 +469,37 @@ export const backgroundJobs = sqliteTable("background_jobs", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const slicerProfiles = sqliteTable("slicer_profiles", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  profileType: text("profile_type").notNull(),
+  name: text("name").notNull(),
+  version: text("version").notNull(),
+  configJson: text("config_json").notNull().default("{}"),
+  sha256: text("sha256").notNull().default(""),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const slicingJobs = sqliteTable("slicing_jobs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  jobKey: text("job_key").notNull().unique(),
+  inputFileId: integer("input_file_id").notNull(),
+  gatewayId: integer("gateway_id").references(() => localGateways.id, { onDelete: "set null" }),
+  status: text("status").notNull().default("queued"),
+  requestJson: text("request_json").notNull(),
+  resultJson: text("result_json"),
+  errorCode: text("error_code"),
+  errorMessage: text("error_message"),
+  timeoutSeconds: integer("timeout_seconds").notNull().default(1800),
+  cancelRequestedAt: text("cancel_requested_at"),
+  claimedAt: text("claimed_at"),
+  startedAt: text("started_at"),
+  completedAt: text("completed_at"),
+  createdBy: text("created_by").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
