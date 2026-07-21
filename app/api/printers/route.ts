@@ -5,6 +5,7 @@ import {
   bambuMaterialUsage,
   printFiles,
   printerCommands,
+  printerBindings,
   printers,
   spoolmanSpools,
 } from "../../../db/schema";
@@ -160,9 +161,10 @@ export async function PATCH(request: Request) {
           plateIndex: Number(p.plateIndex || 0),
         });
       }
+      const [binding] = await getDb().select().from(printerBindings).where(eq(printerBindings.printerId,p.id)).limit(1);
       const [command] = await getDb()
         .insert(printerCommands)
-        .values({ printerId: p.id, command: p.command, payload })
+        .values({ printerId: p.id, bindingId: binding?.id, idempotencyKey: crypto.randomUUID(), command: p.command, payload, status:"pending" })
         .returning();
       return Response.json({ command }, { status: 202 });
     }

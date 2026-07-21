@@ -355,6 +355,8 @@ export const printerCommands = sqliteTable("printer_commands", {
   printerId: integer("printer_id")
     .notNull()
     .references(() => printers.id),
+  bindingId: integer("binding_id").references(() => printerBindings.id),
+  idempotencyKey: text("idempotency_key").unique(),
   command: text("command").notNull(),
   payload: text("payload").notNull().default("{}"),
   status: text("status").notNull().default("待执行"),
@@ -363,6 +365,8 @@ export const printerCommands = sqliteTable("printer_commands", {
     .notNull()
     .default(sql`CURRENT_TIMESTAMP`),
   completedAt: text("completed_at"),
+  acknowledgedAt: text("acknowledged_at"),
+  retryable: integer("retryable", { mode: "boolean" }).notNull().default(false),
 });
 
 export const spoolmanSpools = sqliteTable("spoolman_spools", {
@@ -397,6 +401,18 @@ export const localGateways = sqliteTable("local_gateways", {
   lastSeenAt: text("last_seen_at"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const gatewayDiscoveries = sqliteTable("gateway_discoveries", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  gatewayId: integer("gateway_id").notNull().references(() => localGateways.id, { onDelete: "cascade" }),
+  deviceId: text("device_id").notNull(),
+  deviceSerial: text("device_serial").notNull(),
+  deviceName: text("device_name").notNull().default("Bambu Lab"),
+  deviceModel: text("device_model").notNull().default(""),
+  host: text("host").notNull().default(""),
+  source: text("source").notNull().default("bambu_ssdp"),
+  lastSeenAt: text("last_seen_at").notNull(),
 });
 
 export const gatewayTokens = sqliteTable("gateway_tokens", {

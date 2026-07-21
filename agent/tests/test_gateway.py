@@ -2,6 +2,8 @@ import unittest
 from layertrace_gateway.discovery import DiscoveredPrinter, deduplicate, parse_ssdp_response
 from layertrace_gateway.registry import PrinterConnectionRegistry
 from layertrace_gateway.secrets import CredentialStore
+from layertrace_gateway.mqtt import MultiPrinterMqttManager
+from layertrace_gateway.ams import normalize_ams
 
 class MemoryCredentials(CredentialStore):
     def __init__(self): self.values = {}
@@ -12,6 +14,15 @@ class MemoryCredentials(CredentialStore):
 class FakeConnection:
     def __init__(self): self.closed = False
     def connect(self): pass
+    def close(self): self.closed = True
+
+class FakeMqtt:
+    failures = 0
+    def __init__(self): self.closed = False; self.published = []
+    def connect(self, host, username, password):
+        if FakeMqtt.failures: FakeMqtt.failures -= 1; raise OSError("offline")
+    def subscribe(self, topic, callback): self.topic, self.callback = topic, callback
+    def publish(self, topic, payload): self.published.append((topic, payload))
     def close(self): self.closed = True
 
 class GatewayTests(unittest.TestCase):
@@ -44,5 +55,32 @@ class GatewayTests(unittest.TestCase):
         registry.register_connection(printer.device_id, first)
         registry.register_connection(printer.device_id, second)
         self.assertTrue(first.closed); self.assertFalse(second.closed)
+
+    def test_multi_device_connect_and_ip_change_deduplicate(self):
+        credentials, now = MemoryCredentials(), [0.0]
+        for key in ("bambu:A", "bambu:B"): credentials.set_access_code(key, "local-only")
+        manager = MultiPrinterMqttManager(credentials, FakeMqtt, clock=lambda: now[0], jitter=0)
+        first = manager.upsert("bambu:A", "A", "10.0.0.1")
+        manager.upsert("bambu:B", "B", "10.0.0.2")
+        self.assertIs(first, manager.upsert("bambu:A", "A", "10.0.0.9"))
+        manager.connect_due(lambda *_: None)
+        self.assertEqual(len(manager.sessions), 2)
+        self.assertTrue(all(item.connected for item in manager.sessions.values()))
+
+    def test_exponential_reconnect(self):
+        credentials, now = MemoryCredentials(), [10.0]
+        credentials.set_access_code("bambu:A", "local-only")
+        manager = MultiPrinterMqttManager(credentials, FakeMqtt, base_delay=2, clock=lambda: now[0], jitter=0)
+        manager.upsert("bambu:A", "A", "10.0.0.1"); FakeMqtt.failures = 1
+        manager.connect_due(lambda *_: None)
+        self.assertEqual(manager.sessions["bambu:A"].next_retry_at, 12)
+        manager.connect_due(lambda *_: None); self.assertFalse(manager.sessions["bambu:A"].connected)
+        now[0] = 12; manager.connect_due(lambda *_: None)
+        self.assertTrue(manager.sessions["bambu:A"].connected)
+
+    def test_normalizes_and_deduplicates_ams_slots(self):
+        report = {"print":{"ams":{"tray_now":"1","ams":[{"id":"0","tray":[{"id":"1","tray_type":"pla","tray_color":"ff0000ff","remain":44},{"id":"1","remain":1}]}]}}}
+        slots = normalize_ams(report)
+        self.assertEqual(slots, [{"unit":0,"slot":1,"material":"PLA","colorHex":"#FF0000","remainingPercent":44.0,"active":True}])
 
 if __name__ == "__main__": unittest.main()

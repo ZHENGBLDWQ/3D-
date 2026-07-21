@@ -22,12 +22,13 @@ import migration0019 from "../drizzle/0019_link_jobs_to_printers.sql?raw";
 import migration0020 from "../drizzle/0020_job_production_links.sql?raw";
 import migration0021 from "../drizzle/0021_gateway_foundation.sql?raw";
 import migration0022 from "../drizzle/0022_model_asset_library.sql?raw";
+import migration0023 from "../drizzle/0023_bambu_realtime_gateway.sql?raw";
 
 const migrations = [
   migration0000,migration0001,migration0002,migration0003,migration0004,
   migration0005,migration0006,migration0007,migration0008,migration0009,
   migration0010,migration0011,migration0012,migration0013,migration0014,
-  migration0015,migration0016,migration0017,migration0018,migration0019,migration0020,migration0021,migration0022,
+  migration0015,migration0016,migration0017,migration0018,migration0019,migration0020,migration0021,migration0022,migration0023,
 ];
 
 let schemaPromise: Promise<void> | null = null;
