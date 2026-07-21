@@ -364,6 +364,9 @@ function HomeWorkspace() {
             <a className="main-nav-link" href="/preflight" title="下发预检"><span>✓</span><em>下发预检</em></a>
             <a className="main-nav-link" href="/scheduling" title="智能排产"><span>⌘</span><em>智能排产</em></a>
             <a className="main-nav-link" href="/dispatch" title="下发工作流"><span>⇢</span><em>下发工作流</em></a>
+            <a className="main-nav-link" href="/execution" title="生产执行"><span>▶</span><em>生产执行</em></a>
+            <a className="main-nav-link" href="/quality" title="质量追溯"><span>◎</span><em>质量追溯</em></a>
+            <a className="main-nav-link" href="/profit" title="利润分析"><span>RM</span><em>利润分析</em></a>
             <button className={section==="系统中心"?"nav-active":""} aria-current={section==="系统中心"?"page":undefined} title="系统中心" onClick={()=>setSection("系统中心")}><span>⚙</span><em>系统中心</em></button>
           </div>
         </nav>
