@@ -58,3 +58,11 @@ test("serialized spools expose offline labels and scanner-assisted issue selecti
  assert.match(page,/打印标签/);assert.match(label,/import\("qrcode"\)/);assert.match(label,/`LT:SPOOL:\$\{spool\.spoolCode\}`/);
  assert.match(label,/不含任何设备密钥/);assert.match(css,/@media print/);assert.match(pkg,/"qrcode"/);
 });
+
+test("material catalog master data drives shared color and AMS metadata",async()=>{
+ const [api,page,css]=await Promise.all([read("app/api/inventory-v2/route.ts"),read("app/inventory/inventory-v2-client.tsx"),read("app/inventory/material-catalog.css")]);
+ assert.match(api,/action==="saveCatalog"/);assert.match(api,/inventory_v2\.catalog\.created/);assert.match(api,/inventory_v2\.catalog\.updated/);
+ assert.match(api,/\^\[0-9A-F\]\{6\}\$/);assert.match(api,/organization_id=\?/);assert.match(api,/ams_compatibility/);
+ for(const label of ["耗材目录与颜色主数据","新增耗材目录","官方色号","真实色值 HEX","AMS兼容性"]){assert.match(page,new RegExp(label),label)}
+ assert.match(page,/tagText/);assert.match(css,/catalog-master-list/);
+});
