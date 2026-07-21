@@ -514,3 +514,23 @@ export const preflightRuns = sqliteTable("preflight_runs", {
 export const preflightChecks = sqliteTable("preflight_checks", {id:integer("id").primaryKey({autoIncrement:true}),runId:integer("run_id").notNull().references(()=>preflightRuns.id,{onDelete:"cascade"}),code:text("code").notNull(),category:text("category").notNull(),level:text("level").notNull(),message:text("message").notNull(),details:text("details").notNull().default("{}"),resolutionActions:text("resolution_actions").notNull().default("[]")});
 export const preflightOverrides = sqliteTable("preflight_overrides", {id:integer("id").primaryKey({autoIncrement:true}),runId:integer("run_id").notNull().references(()=>preflightRuns.id,{onDelete:"cascade"}),actorEmail:text("actor_email").notNull(),reason:text("reason").notNull(),createdAt:text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`)});
 export const dispatchAttempts = sqliteTable("dispatch_attempts", {id:integer("id").primaryKey({autoIncrement:true}),runId:integer("run_id").notNull().references(()=>preflightRuns.id,{onDelete:"cascade"}),printerId:integer("printer_id").notNull().references(()=>printers.id),allowed:integer("allowed",{mode:"boolean"}).notNull().default(false),reason:text("reason").notNull().default(""),actorEmail:text("actor_email").notNull(),createdAt:text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`)});
+
+export const productionPlans = sqliteTable("production_plans", {
+  id: integer("id").primaryKey({ autoIncrement: true }), organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  planNo: text("plan_no").notNull().unique(), status: text("status").notNull().default("draft"), mode: text("mode").notNull().default("recommend_only"),
+  createdBy: text("created_by").notNull(), confirmedBy: text("confirmed_by"), confirmedAt: text("confirmed_at"), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`), updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+export const productionPlanItems = sqliteTable("production_plan_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }), planId: integer("plan_id").notNull().references(() => productionPlans.id, { onDelete: "cascade" }),
+  printJobId: integer("print_job_id").notNull().references(() => printJobs.id, { onDelete: "cascade" }), printerId: integer("printer_id").notNull().references(() => printers.id), score: real("score").notNull(),
+  recommendationReasons: text("recommendation_reasons").notNull().default("[]"), conflicts: text("conflicts").notNull().default("[]"), plannedStartAt: text("planned_start_at").notNull(), plannedEndAt: text("planned_end_at").notNull(), status: text("status").notNull().default("recommended"), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+export const printerSchedules = sqliteTable("printer_schedules", {
+  id: integer("id").primaryKey({ autoIncrement: true }), organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }), planItemId: integer("plan_item_id").notNull().references(() => productionPlanItems.id, { onDelete: "cascade" }), printerId: integer("printer_id").notNull().references(() => printers.id), startsAt: text("starts_at").notNull(), endsAt: text("ends_at").notNull(), status: text("status").notNull().default("reserved"), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+export const scheduleConflicts = sqliteTable("schedule_conflicts", {
+  id: integer("id").primaryKey({ autoIncrement: true }), planItemId: integer("plan_item_id").notNull().references(() => productionPlanItems.id, { onDelete: "cascade" }), code: text("code").notNull(), level: text("level").notNull(), message: text("message").notNull(), details: text("details").notNull().default("{}"), resolvedAt: text("resolved_at"), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+export const scheduleRevisions = sqliteTable("schedule_revisions", {
+  id: integer("id").primaryKey({ autoIncrement: true }), planId: integer("plan_id").notNull().references(() => productionPlans.id, { onDelete: "cascade" }), revisionNo: integer("revision_no").notNull(), snapshot: text("snapshot").notNull(), reason: text("reason").notNull().default(""), createdBy: text("created_by").notNull(), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

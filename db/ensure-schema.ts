@@ -26,12 +26,13 @@ import migration0023 from "../drizzle/0023_bambu_realtime_gateway.sql?raw";
 import migration0024 from "../drizzle/0024_slicing_center.sql?raw";
 import migration0025 from "../drizzle/0025_preflight_center.sql?raw";
 import migration0026 from "../drizzle/0026_order_organization_scope.sql?raw";
+import migration0027 from "../drizzle/0027_intelligent_scheduling.sql?raw";
 
 const migrations = [
   migration0000,migration0001,migration0002,migration0003,migration0004,
   migration0005,migration0006,migration0007,migration0008,migration0009,
   migration0010,migration0011,migration0012,migration0013,migration0014,
-  migration0015,migration0016,migration0017,migration0018,migration0019,migration0020,migration0021,migration0022,migration0023,migration0024,migration0025,migration0026,
+  migration0015,migration0016,migration0017,migration0018,migration0019,migration0020,migration0021,migration0022,migration0023,migration0024,migration0025,migration0026,migration0027,
 ];
 
 let schemaPromise: Promise<void> | null = null;
