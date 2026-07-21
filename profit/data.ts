@@ -1,0 +1,24 @@
+import {getD1} from "../db";
+import {buildProfitReport,type ExtraCostRow,type JobCostRow,type MaterialCostRow,type ProfitSettings,type RevenueRow} from "./report";
+
+type Row=Record<string,unknown>;
+const number=(value:unknown)=>Number(value)||0;
+export async function getProfitReport(organizationId:number){
+  const d1=getD1();
+  await d1.prepare("INSERT OR IGNORE INTO profit_settings(organization_id) VALUES(?)").bind(organizationId).run();
+  const [settingResult,revenueResult,jobResult,materialResult,extraResult,printerResult]=await Promise.all([
+    d1.prepare("SELECT electricity_rate_cents_per_kwh,labor_rate_cents_per_hour,labor_minutes_per_job,packaging_cents_per_order,overhead_basis_points FROM profit_settings WHERE organization_id=?").bind(organizationId).first<Row>(),
+    d1.prepare(`SELECT o.organization_id organizationId,o.id orderId,o.order_no orderNo,o.customer,o.status,oi.quantity,oi.unit_price unitPriceRm FROM orders o JOIN order_items oi ON oi.order_id=o.id WHERE o.organization_id=?`).bind(organizationId).all<Row>(),
+    d1.prepare(`SELECT j.organization_id organizationId,j.id jobId,j.order_id orderId,j.printer_id printerId,j.printer_name printerName,j.status,j.quantity,COALESCE(i.estimated_grams,0) estimatedGrams,COALESCE((SELECT SUM(im.grams_per_item*(1+im.waste_percent/100.0)*b.cost_per_kg/1000.0) FROM item_materials im JOIN material_batches b ON b.id=im.batch_id WHERE im.item_id=j.item_id),0) estimatedMaterialRm,COALESCE(i.estimated_minutes,0) estimatedMinutes,j.started_at startedAt,j.completed_at completedAt,COALESCE(p.hourly_rate,0) hourlyRateRm,COALESCE(p.power_watts,1000) powerWatts FROM print_jobs j LEFT JOIN print_items i ON i.id=j.item_id LEFT JOIN printers p ON p.id=j.printer_id WHERE j.organization_id=?`).bind(organizationId).all<Row>(),
+    d1.prepare(`SELECT j.organization_id organizationId,j.order_id orderId,t.job_id jobId,ABS(t.grams) grams,b.cost_per_kg costPerKgRm,CASE WHEN lower(t.type) IN ('scrap','报废','打印报废') THEN 'scrap' ELSE 'consumption' END kind FROM inventory_transactions t JOIN print_jobs j ON j.id=t.job_id JOIN material_batches b ON b.id=t.batch_id WHERE j.organization_id=? AND lower(t.type) IN ('print_consumption','打印消耗','scrap','报废','打印报废')`).bind(organizationId).all<Row>(),
+    d1.prepare("SELECT organization_id organizationId,order_id orderId,category,basis,amount_cents amountCents,occurred_at occurredAt FROM profit_cost_entries WHERE organization_id=? ORDER BY occurred_at").bind(organizationId).all<Row>(),
+    d1.prepare("SELECT COUNT(DISTINCT printer_id) count FROM printer_bindings WHERE organization_id=? AND status='bound'").bind(organizationId).first<{count:number}>(),
+  ]);
+  const setting=settingResult??{};
+  const settings:ProfitSettings={electricityRateCentsPerKwh:number(setting.electricity_rate_cents_per_kwh),laborRateCentsPerHour:number(setting.labor_rate_cents_per_hour),laborMinutesPerJob:number(setting.labor_minutes_per_job),packagingCentsPerOrder:number(setting.packaging_cents_per_order),overheadBasisPoints:number(setting.overhead_basis_points)};
+  const revenues=(revenueResult.results??[]).map(row=>({organizationId:number(row.organizationId),orderId:number(row.orderId),orderNo:String(row.orderNo),customer:String(row.customer),status:String(row.status),quantity:number(row.quantity),unitPriceRm:number(row.unitPriceRm)} satisfies RevenueRow));
+  const jobs=(jobResult.results??[]).map(row=>({organizationId:number(row.organizationId),jobId:number(row.jobId),orderId:row.orderId===null?null:number(row.orderId),printerId:row.printerId===null?null:number(row.printerId),printerName:String(row.printerName??""),status:String(row.status),quantity:number(row.quantity),estimatedGrams:number(row.estimatedGrams),estimatedMaterialRm:number(row.estimatedMaterialRm),estimatedMinutes:number(row.estimatedMinutes),startedAt:row.startedAt===null?null:String(row.startedAt),completedAt:row.completedAt===null?null:String(row.completedAt),hourlyRateRm:number(row.hourlyRateRm),powerWatts:number(row.powerWatts)} satisfies JobCostRow));
+  const materials=(materialResult.results??[]).map(row=>({organizationId:number(row.organizationId),orderId:row.orderId===null?null:number(row.orderId),jobId:number(row.jobId),grams:number(row.grams),costPerKgRm:number(row.costPerKgRm),kind:String(row.kind) as MaterialCostRow["kind"]} satisfies MaterialCostRow));
+  const extras=(extraResult.results??[]).map(row=>({organizationId:number(row.organizationId),orderId:row.orderId===null?null:number(row.orderId),category:String(row.category) as ExtraCostRow["category"],basis:String(row.basis) as ExtraCostRow["basis"],amountCents:number(row.amountCents),occurredAt:String(row.occurredAt)} satisfies ExtraCostRow));
+  return buildProfitReport(organizationId,{settings,revenues,jobs,materials,extras,activePrinters:number(printerResult?.count)});
+}

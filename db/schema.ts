@@ -51,6 +51,15 @@ export const costSettings = sqliteTable("cost_settings", {
     .notNull()
     .default(sql`CURRENT_TIMESTAMP`),
 });
+export const profitSettings = sqliteTable("profit_settings", {
+  organizationId: integer("organization_id").primaryKey().references(() => organizations.id, { onDelete: "cascade" }),
+  electricityRateCentsPerKwh: integer("electricity_rate_cents_per_kwh").notNull().default(80),
+  laborRateCentsPerHour: integer("labor_rate_cents_per_hour").notNull().default(0),
+  laborMinutesPerJob: integer("labor_minutes_per_job").notNull().default(0),
+  packagingCentsPerOrder: integer("packaging_cents_per_order").notNull().default(0),
+  overheadBasisPoints: integer("overhead_basis_points").notNull().default(0),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
 
 export const printItems = sqliteTable("print_items", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -114,6 +123,20 @@ export const printJobs = sqliteTable("print_jobs", {
   createdAt: text("created_at")
     .notNull()
     .default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const profitCostEntries = sqliteTable("profit_cost_entries", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  orderId: integer("order_id").references(() => orders.id),
+  jobId: integer("job_id").references(() => printJobs.id),
+  category: text("category").notNull(),
+  basis: text("basis").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  occurredAt: text("occurred_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  note: text("note").notNull().default(""),
+  createdBy: text("created_by").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const inventoryTransactions = sqliteTable("inventory_transactions", {
