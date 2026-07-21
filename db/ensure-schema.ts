@@ -37,6 +37,7 @@ import migration0034 from "../drizzle/0034_reporting_exports.sql?raw";
 import migration0035 from "../drizzle/0035_procurement_replenishment.sql?raw";
 import migration0036 from "../drizzle/0036_crm_quotes.sql?raw";
 import migration0037 from "../drizzle/0037_disaster_recovery.sql?raw";
+import migration0038 from "../drizzle/0038_finished_goods_fulfillment.sql?raw";
 
 const baseMigrations = [
   migration0000,migration0001,migration0002,migration0003,migration0004,
@@ -44,7 +45,7 @@ const baseMigrations = [
   migration0010,migration0011,migration0012,migration0013,migration0014,
   migration0015,migration0016,migration0017,migration0018,migration0019,migration0020,migration0021,migration0022,migration0023,migration0024,migration0025,migration0026,migration0027,migration0028,migration0029,
 ].map((sql,id)=>({id,sql}));
-const migrations = [...baseMigrations,{id:30,sql:migration0030},{id:31,sql:migration0031},{id:32,sql:migration0032},{id:33,sql:migration0033},{id:34,sql:migration0034},{id:35,sql:migration0035},{id:36,sql:migration0036},{id:37,sql:migration0037}];
+const migrations = [...baseMigrations,{id:30,sql:migration0030},{id:31,sql:migration0031},{id:32,sql:migration0032},{id:33,sql:migration0033},{id:34,sql:migration0034},{id:35,sql:migration0035},{id:36,sql:migration0036},{id:37,sql:migration0037},{id:38,sql:migration0038}];
 
 let schemaPromise: Promise<void> | null = null;
 
