@@ -8,6 +8,7 @@ const value=(input:unknown,max=200)=>String(input??"").trim().slice(0,max);
 const integer=(input:unknown)=>{const n=Number(input);return Number.isInteger(n)&&n>0?n:0};
 const amount=(input:unknown)=>{const n=Number(input);return Number.isFinite(n)&&n>0?Math.round(n*1000)/1000:0};
 const managers=new Set(["owner","manager"]);
+async function receiptSpools(org:number,receiptId:number){const rows=await getD1().prepare(`SELECT s.id,s.spool_code spoolCode,s.remaining_net_grams remainingNetGrams,s.state,c.material,c.brand,c.color_name colorName,c.color_code colorCode,c.color_hex colorHex FROM material_spools s JOIN material_purchase_lots l ON l.id=s.purchase_lot_id AND l.organization_id=s.organization_id JOIN material_catalog_items c ON c.id=s.catalog_item_id AND c.organization_id=s.organization_id WHERE s.organization_id=? AND l.goods_receipt_id=? ORDER BY s.id`).bind(org,receiptId).all();return rows.results??[]}
 
 export async function GET(){
   const denied=await requireApiAccess();if(denied)return denied;
@@ -26,9 +27,10 @@ export async function GET(){
       FROM purchase_orders po JOIN suppliers s ON s.id=po.supplier_id AND s.organization_id=po.organization_id JOIN procurement_requests r ON r.id=po.request_id AND r.organization_id=po.organization_id
       LEFT JOIN purchase_order_items poi ON poi.purchase_order_id=po.id AND poi.organization_id=po.organization_id WHERE po.organization_id=? GROUP BY po.id ORDER BY po.id DESC LIMIT 100`).bind(context.organizationId).all(),
     db.prepare(`SELECT poi.id,poi.purchase_order_id orderId,poi.batch_id batchId,poi.ordered_grams orderedGrams,poi.received_grams receivedGrams,b.material,b.color,
-      COALESCE(m.sku,'MAT-'||printf('%04d',b.id)) sku FROM purchase_order_items poi JOIN material_batches b ON b.id=poi.batch_id
-      LEFT JOIN material_inventory_meta m ON m.batch_id=b.id WHERE poi.organization_id=? ORDER BY poi.id`).bind(context.organizationId).all(),
-    db.prepare("SELECT gr.*,po.purchase_no purchaseNo FROM goods_receipts gr JOIN purchase_orders po ON po.id=gr.purchase_order_id AND po.organization_id=gr.organization_id WHERE gr.organization_id=? ORDER BY gr.id DESC LIMIT 100").bind(context.organizationId).all(),
+      COALESCE(m.sku,'MAT-'||printf('%04d',b.id)) sku,c.id catalogItemId,c.catalog_code catalogCode,c.default_net_grams defaultNetGrams,c.default_tare_grams defaultTareGrams,c.color_hex colorHex
+      FROM purchase_order_items poi JOIN material_batches b ON b.id=poi.batch_id LEFT JOIN material_inventory_meta m ON m.batch_id=b.id
+      LEFT JOIN material_catalog_items c ON c.organization_id=poi.organization_id AND c.legacy_batch_id=poi.batch_id WHERE poi.organization_id=? ORDER BY poi.id`).bind(context.organizationId).all(),
+    db.prepare("SELECT gr.*,po.purchase_no purchaseNo,COALESCE((SELECT SUM(gri.spool_count) FROM goods_receipt_items gri WHERE gri.receipt_id=gr.id AND gri.organization_id=gr.organization_id),0) spoolCount FROM goods_receipts gr JOIN purchase_orders po ON po.id=gr.purchase_order_id AND po.organization_id=gr.organization_id WHERE gr.organization_id=? ORDER BY gr.id DESC LIMIT 100").bind(context.organizationId).all(),
   ]);
   const materialRows=(materials.results??[]).map(row=>({...row,suggestedGrams:suggestedReplenishment(Number(row.remainingGrams),Number(row.lowStockGrams),Number(row.incomingGrams))}));
   return Response.json({canManage:managers.has(context.role),canReceive:can(context,"inventory.write"),suppliers:suppliers.results??[],materials:materialRows,requests:requests.results??[],orders:orders.results??[],orderItems:orderItems.results??[],receipts:receipts.results??[]});
@@ -94,27 +96,35 @@ export async function PATCH(request:Request){
     }
     if(action==="receive"){
       const denied=await requireApiAccess(true,"inventory.write");if(denied)return denied;
-      const orderId=integer(body.orderId),itemId=integer(body.itemId),grams=amount(body.grams),key=value(body.idempotencyKey,100);if(!orderId||!itemId||!grams||key.length<8)return fail("收货参数或幂等键无效");
-      const duplicate=await db.prepare("SELECT id,receipt_no receiptNo FROM goods_receipts WHERE organization_id=? AND idempotency_key=?").bind(org,key).first();if(duplicate)return Response.json({...duplicate,idempotent:true});
-      const row=await db.prepare(`SELECT po.status,poi.id itemId,poi.batch_id batchId,poi.ordered_grams orderedGrams,poi.received_grams receivedGrams
+      const orderId=integer(body.orderId),itemId=integer(body.itemId),spoolCount=integer(body.spoolCount),perSpoolNetGrams=amount(body.perSpoolNetGrams),tareGrams=Math.max(0,amount(body.tareGrams)),key=value(body.idempotencyKey,100),lotInput=value(body.lotNo,80).toUpperCase();const grams=Math.round(spoolCount*perSpoolNetGrams*1000)/1000;if(!orderId||!itemId||!spoolCount||spoolCount>100||!perSpoolNetGrams||key.length<8)return fail("请填写 1 至 100 卷的收货数量和单卷净重");
+      const duplicate=await db.prepare("SELECT id,receipt_no receiptNo FROM goods_receipts WHERE organization_id=? AND idempotency_key=?").bind(org,key).first<{id:number;receiptNo:string}>();if(duplicate)return Response.json({...duplicate,spools:await receiptSpools(org,duplicate.id),idempotent:true});
+      const row=await db.prepare(`SELECT po.status,po.supplier_id supplierId,poi.id itemId,poi.batch_id batchId,poi.ordered_grams orderedGrams,poi.received_grams receivedGrams,poi.unit_cost_per_kg unitCostPerKg,c.id catalogItemId,c.catalog_code catalogCode,c.material,c.brand,c.color_name colorName,c.color_code colorCode,c.color_hex colorHex
         FROM purchase_orders po JOIN purchase_order_items poi ON poi.purchase_order_id=po.id AND poi.organization_id=po.organization_id
         JOIN material_batch_organizations mbo ON mbo.batch_id=poi.batch_id AND mbo.organization_id=po.organization_id
-        WHERE po.id=? AND poi.id=? AND po.organization_id=?`).bind(orderId,itemId,org).first<{status:PurchaseStatus;itemId:number;batchId:number;orderedGrams:number;receivedGrams:number}>();
-      if(!row)return fail("采购订单明细不存在或不属于当前组织",404);if(!["ordered","partially_received"].includes(row.status))return fail("当前订单状态不能收货",409);if(row.receivedGrams+grams>row.orderedGrams+0.0001)return fail("收货数量超过未收数量",409);
+        LEFT JOIN material_catalog_items c ON c.organization_id=po.organization_id AND c.legacy_batch_id=poi.batch_id
+        WHERE po.id=? AND poi.id=? AND po.organization_id=?`).bind(orderId,itemId,org).first<{status:PurchaseStatus;supplierId:number;itemId:number;batchId:number;orderedGrams:number;receivedGrams:number;unitCostPerKg:number;catalogItemId:number|null;catalogCode:string|null;material:string;brand:string;colorName:string;colorCode:string;colorHex:string}>();
+      if(!row)return fail("采购订单明细不存在或不属于当前组织",404);if(!row.catalogItemId)return fail("该采购明细尚未关联耗材主数据，请先完成主数据映射",409);if(!["ordered","partially_received"].includes(row.status))return fail("当前订单状态不能收货",409);if(row.receivedGrams+grams>row.orderedGrams+0.0001)return fail("实体卷总净重超过采购未收数量",409);
+      const location=await db.prepare("SELECT id FROM inventory_locations_v2 WHERE organization_id=? AND code='MAIN' AND active=1").bind(org).first<{id:number}>();if(!location)return fail("主仓库位不存在",409);
       const all=(await db.prepare("SELECT ordered_grams orderedGrams,received_grams receivedGrams,id FROM purchase_order_items WHERE purchase_order_id=? AND organization_id=?").bind(orderId,org).all<{orderedGrams:number;receivedGrams:number;id:number}>()).results??[];
-      const nextStatus=receiptStatus(all.map(item=>({orderedGrams:item.orderedGrams,receivedGrams:item.receivedGrams,incomingGrams:item.id===itemId?grams:0}))),receiptNo=`GR-${Date.now().toString(36).toUpperCase()}`,note=`采购收货:${key}:${itemId}`;
-      await db.batch([
+      const nextStatus=receiptStatus(all.map(item=>({orderedGrams:item.orderedGrams,receivedGrams:item.receivedGrams,incomingGrams:item.id===itemId?grams:0}))),receiptNo=`GR-${Date.now().toString(36).toUpperCase()}`,lotNo=lotInput||`${receiptNo}-${row.catalogCode}`,note=`采购收货:${key}:${itemId}`,spools=Array.from({length:spoolCount},(_,index)=>({spoolCode:`${receiptNo}-${String(index+1).padStart(3,"0")}`,qrToken:`receipt:${key}:${index+1}`}));
+      const statements=[
         db.prepare("INSERT INTO goods_receipts(organization_id,purchase_order_id,idempotency_key,receipt_no,received_by,received_at) VALUES(?,?,?,?,?,?)").bind(org,orderId,key,receiptNo,context.email,now),
         db.prepare("INSERT INTO inventory_transactions(batch_id,type,grams,note) VALUES(?,'采购入库',?,?)").bind(row.batchId,grams,note),
         db.prepare("UPDATE material_batches SET remaining_grams=remaining_grams+?,initial_grams=initial_grams+? WHERE id=? AND EXISTS(SELECT 1 FROM material_batch_organizations WHERE organization_id=? AND batch_id=?)").bind(grams,grams,row.batchId,org,row.batchId),
         db.prepare(`INSERT INTO goods_receipt_items(organization_id,receipt_id,purchase_order_item_id,batch_id,received_grams,inventory_transaction_id)
           VALUES(?,(SELECT id FROM goods_receipts WHERE organization_id=? AND idempotency_key=?),?,?,?,(SELECT id FROM inventory_transactions WHERE batch_id=? AND note=? ORDER BY id DESC LIMIT 1))`).bind(org,org,key,itemId,row.batchId,grams,row.batchId,note),
+        db.prepare("INSERT INTO material_purchase_lots(organization_id,catalog_item_id,lot_no,supplier_id,purchase_order_item_id,goods_receipt_id,unit_cost_cents_per_kg,received_at,legacy_batch_id) VALUES(?,?,?,?,?,(SELECT id FROM goods_receipts WHERE organization_id=? AND idempotency_key=?),?,?,?)").bind(org,row.catalogItemId,lotNo,row.supplierId,itemId,org,key,Math.max(0,Math.round(row.unitCostPerKg*100)),now,row.batchId),
+        db.prepare("UPDATE goods_receipt_items SET purchase_lot_id=(SELECT id FROM material_purchase_lots WHERE organization_id=? AND lot_no=?),spool_count=?,per_spool_net_grams=? WHERE organization_id=? AND receipt_id=(SELECT id FROM goods_receipts WHERE organization_id=? AND idempotency_key=?) AND purchase_order_item_id=?").bind(org,lotNo,spoolCount,perSpoolNetGrams,org,org,key,itemId),
+        ...spools.flatMap(spool=>[
+          db.prepare("INSERT INTO material_spools(organization_id,spool_code,catalog_item_id,purchase_lot_id,current_location_id,state,initial_net_grams,remaining_net_grams,tare_grams,qr_token) VALUES(?,?,?,(SELECT id FROM material_purchase_lots WHERE organization_id=? AND lot_no=?),?,'sealed',?,?,?,?)").bind(org,spool.spoolCode,row.catalogItemId,org,lotNo,location.id,perSpoolNetGrams,perSpoolNetGrams,tareGrams,spool.qrToken),
+          db.prepare("INSERT INTO material_spool_movements(organization_id,spool_id,movement_type,to_location_id,net_grams_delta,idempotency_key,operator_email,note) VALUES(?,(SELECT id FROM material_spools WHERE organization_id=? AND spool_code=?),'receipt',?,?,?,?,?)").bind(org,org,spool.spoolCode,location.id,perSpoolNetGrams,`${key}:${spool.spoolCode}`,context.email,`采购入库 ${receiptNo}`),
+        ]),
         db.prepare("UPDATE purchase_order_items SET received_grams=received_grams+? WHERE id=? AND organization_id=? AND received_grams+?<=ordered_grams").bind(grams,itemId,org,grams),
         db.prepare("UPDATE purchase_orders SET status=?,updated_at=? WHERE id=? AND organization_id=? AND status IN ('ordered','partially_received')").bind(nextStatus,now,orderId,org),
-        db.prepare("INSERT INTO audit_logs(organization_id,actor_email,action,resource,resource_id,detail) VALUES(?,?,'procurement.receipt.posted','goods_receipt',?,?)").bind(org,context.email,receiptNo,JSON.stringify({orderId,itemId,batchId:row.batchId,grams,key,nextStatus})),
-      ]);
-      return Response.json({receiptNo,status:nextStatus},{status:201});
+        db.prepare("INSERT INTO audit_logs(organization_id,actor_email,action,resource,resource_id,detail) VALUES(?,?,'procurement.receipt.posted.serialized','goods_receipt',?,?)").bind(org,context.email,receiptNo,JSON.stringify({orderId,itemId,batchId:row.batchId,grams,spoolCount,perSpoolNetGrams,lotNo,key,nextStatus})),
+      ];await db.batch(statements);
+      const receipt=await db.prepare("SELECT id FROM goods_receipts WHERE organization_id=? AND idempotency_key=?").bind(org,key).first<{id:number}>();return Response.json({receiptNo,status:nextStatus,lotNo,spools:await receiptSpools(org,receipt!.id)},{status:201});
     }
     return fail("不支持的采购操作");
-  }catch(error){const message=error instanceof Error?error.message:"采购操作失败";if(message.includes("UNIQUE")&&action==="receive"){const existing=await db.prepare("SELECT id,receipt_no receiptNo FROM goods_receipts WHERE organization_id=? AND idempotency_key=?").bind(org,value(body.idempotencyKey,100)).first();if(existing)return Response.json({...existing,idempotent:true})}return fail(message.includes("constraint")?"采购状态已变化，请刷新后重试":message,message.includes("constraint")?409:400)}
+  }catch(error){const message=error instanceof Error?error.message:"采购操作失败";if(message.includes("UNIQUE")&&action==="receive"){const existing=await db.prepare("SELECT id,receipt_no receiptNo FROM goods_receipts WHERE organization_id=? AND idempotency_key=?").bind(org,value(body.idempotencyKey,100)).first<{id:number;receiptNo:string}>();if(existing)return Response.json({...existing,spools:await receiptSpools(org,existing.id),idempotent:true})}return fail(message.includes("constraint")?"采购状态已变化，请刷新后重试":message,message.includes("constraint")?409:400)}
 }
