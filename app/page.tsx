@@ -506,15 +506,21 @@ function Dashboard({
 }) {
   const [systemHealth,setSystemHealth]=useState<SystemData["health"]|null>(null);
   const [systemAlerts,setSystemAlerts]=useState<SystemData["alerts"]>([]);
+  const [businessAlerts,setBusinessAlerts]=useState<Array<{id:number;status:string;severity:string;title:string;detail:string;resourceType:string;signalActive:number}>>([]);
   const [dashboardNow]=useState(()=>Date.now());
-  useEffect(()=>{let active=true;const load=()=>fetch("/api/system",{cache:"no-store"}).then(response=>response.ok?response.json():null).then(result=>{if(active&&result){setSystemHealth(result.health);setSystemAlerts(result.alerts||[])}}).catch(()=>undefined);void load();const timer=window.setInterval(load,30000);return()=>{active=false;window.clearInterval(timer)}},[]);
+  useEffect(()=>{let active=true;const load=()=>Promise.all([fetch("/api/system",{cache:"no-store"}),fetch("/api/alerts",{cache:"no-store"})]).then(async([systemResponse,alertResponse])=>{const [systemResult,alertResult]=await Promise.all([systemResponse.ok?systemResponse.json():null,alertResponse.ok?alertResponse.json():null]);if(active){if(systemResult){setSystemHealth(systemResult.health);setSystemAlerts(systemResult.alerts||[])}if(alertResult)setBusinessAlerts(alertResult.alerts||[])}}).catch(()=>undefined);void load();const timer=window.setInterval(load,30000);return()=>{active=false;window.clearInterval(timer)}},[]);
   const dueSoon=data.orders.filter(order=>order.dueAt&&order.status!=="已完成"&&new Date(order.dueAt).getTime()<=dashboardNow+2*86400000);
-  const tasks=[
+  const activeBusiness=businessAlerts.filter(item=>item.signalActive&&item.status!=="resolved"),varianceAlerts=activeBusiness.filter(item=>item.resourceType==="material_variance"),settlementAlerts=activeBusiness.filter(item=>item.resourceType==="print_session"),feedAlerts=activeBusiness.filter(item=>item.resourceType==="printer_feed"),calibrationAlerts=activeBusiness.filter(item=>item.resourceType==="material_calibration");
+  const tasks:Array<{tone:string;title:string;detail:string;section?:Section;href?:string}>=[
     ...(dueSoon.length?[{tone:"danger",title:`${dueSoon.length} 个订单临近或已超过交期`,detail:"优先检查排程与交付承诺",section:"订单" as Section}]:[]),
     ...(metrics.waiting?[{tone:"warning",title:`${metrics.waiting} 个任务正在等待打印`,detail:"检查打印机负载并安排生产",section:"打印队列" as Section}]:[]),
     ...(metrics.alerts?[{tone:"danger",title:`${metrics.alerts} 项耗材低于安全库存`,detail:"补货、调拨或调整生产计划",section:"耗材库存" as Section}]:[]),
     ...(systemHealth?.offlinePrinters?[{tone:"danger",title:`${systemHealth.offlinePrinters} 台打印机连接异常`,detail:"检查本地 Agent 与局域网连接",section:"设备管理" as Section}]:[]),
     ...((systemHealth?.pendingCommands||systemHealth?.failedCommands)?[{tone:"warning",title:"设备命令需要处理",detail:`超时 ${systemHealth?.pendingCommands||0} · 失败 ${systemHealth?.failedCommands||0}`,section:"系统中心" as Section}]:[]),
+    ...(varianceAlerts.length?[{tone:"danger",title:`${varianceAlerts.length} 张耗材称重差异单待处理`,detail:"库存尚未调整，请核查实际原因",href:"/material-variances"}]:[]),
+    ...(settlementAlerts.length?[{tone:"warning",title:`${settlementAlerts.length} 个打印会话尚未完成耗材结算`,detail:"补齐实体卷、分类、层数或称重证据",href:"/settlements"}]:[]),
+    ...(feedAlerts.length?[{tone:"danger",title:`${feedAlerts.length} 个供料位置未绑定实体卷`,detail:"绑定前不会自动扣减实际库存",href:"/inventory"}]:[]),
+    ...(calibrationAlerts.length?[{tone:"info",title:`${calibrationAlerts.length} 组校准样本仍不足`,detail:"完成至少 3 个有效称重样本",href:"/calibration"}]:[]),
     ...(!data.printers.length?[{tone:"info",title:"还没有添加打印机",detail:"建立第一台设备档案后即可安排任务",section:"设备管理" as Section}]:[]),
   ];
   return (
@@ -550,12 +556,12 @@ function Dashboard({
         />
       </section>
       <section className="today-center panel">
-        <header className="today-center-head"><div><small>TODAY'S PRIORITIES</small><h2>今天需要处理什么</h2><p>{tasks.length?`当前有 ${tasks.length} 类事项需要关注。建议从高风险项目开始。`:"订单、设备与库存运行正常，暂无紧急事项。"}</p></div><button onClick={()=>onNavigate("系统中心")}>查看全部告警 →</button></header>
+        <header className="today-center-head"><div><small>TODAY'S PRIORITIES</small><h2>今天需要处理什么</h2><p>{tasks.length?`当前有 ${tasks.length} 类事项需要关注。建议从高风险项目开始。`:"订单、设备与库存运行正常，暂无紧急事项。"}</p></div><button onClick={()=>{window.location.href="/alerts"}}>查看全部告警 →</button></header>
         <div className="today-task-grid">
-          {tasks.slice(0,5).map((task,index)=><button className={`today-task ${task.tone}`} key={`${task.title}-${index}`} onClick={()=>onNavigate(task.section)}><i>{task.tone==="danger"?"!":task.tone==="warning"?"△":"+"}</i><span><strong>{task.title}</strong><small>{task.detail}</small></span><b>→</b></button>)}
+          {tasks.slice(0,7).map((task,index)=><button className={`today-task ${task.tone}`} key={`${task.title}-${index}`} onClick={()=>task.href?window.location.href=task.href:task.section&&onNavigate(task.section)}><i>{task.tone==="danger"?"!":task.tone==="warning"?"△":"+"}</i><span><strong>{task.title}</strong><small>{task.detail}</small></span><b>→</b></button>)}
           {!tasks.length&&<div className="today-clear"><i>✓</i><span><strong>今日运行平稳</strong><small>系统会持续检查交期、设备连接、任务队列和库存水位。</small></span></div>}
         </div>
-        {systemAlerts[0]&&<footer className="today-alert-preview"><span>最新告警</span><strong>{systemAlerts[0].title}</strong><p>{systemAlerts[0].detail}</p></footer>}
+        {(activeBusiness[0]||systemAlerts[0])&&<footer className="today-alert-preview"><span>最新告警</span><strong>{activeBusiness[0]?.title||systemAlerts[0]?.title}</strong><p>{activeBusiness[0]?.detail||systemAlerts[0]?.detail}</p></footer>}
       </section>
       <section className="main-grid">
         <div className="panel queue-panel">
