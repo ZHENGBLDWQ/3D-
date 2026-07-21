@@ -27,3 +27,13 @@ The LAN Access Code is passed directly to `PrinterConnectionRegistry.bind` and w
 - Verify hosts with multiple adapters and Windows Firewall enabled.
 - Verify MQTT reconnect using credentials retrieved from the store.
 - Validate simultaneous connections, printer reboot, DHCP changes, and Access Code rotation.
+
+## Generic Windows Local Hub
+
+The previous `x2d` scripts remain for compatibility. New A1, X2D and P2S installations should use the generic multi-device installer:
+
+```powershell
+.\agent\install_local_hub.ps1 -LayerTraceUrl "https://your-layertrace-site.example"
+```
+
+The installer copies the standard-library-only Python service to the current user's Local AppData, discovers Bambu printers, stores the gateway token and selected printer access codes with Windows DPAPI, and registers a limited-permission scheduled task. The service refreshes DHCP addresses, pulls organization-scoped binding requests, maintains one read-only MQTT monitor per printer, persists events before upload, and reports diagnostics. It never exposes a printer-control command surface.

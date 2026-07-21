@@ -5,13 +5,16 @@ from layertrace_gateway.secrets import CredentialStore
 from layertrace_gateway.mqtt import MultiPrinterMqttManager
 from layertrace_gateway.ams import normalize_ams
 from layertrace_gateway.monitor import BambuMonitorAdapter, DurableEventOutbox
+from layertrace_gateway.service import LocalHubService
 import tempfile
+import threading
 
 class MemoryCredentials(CredentialStore):
     def __init__(self): self.values = {}
     def set_access_code(self, device_id, access_code): self.values[device_id] = access_code
     def get_access_code(self, device_id): return self.values.get(device_id)
     def delete_access_code(self, device_id): return self.values.pop(device_id, None) is not None
+    def has_access_code(self, device_id): return device_id in self.values
 
 class FakeConnection:
     def __init__(self): self.closed = False
@@ -26,6 +29,22 @@ class FakeMqtt:
     def subscribe(self, topic, callback): self.topic, self.callback = topic, callback
     def publish(self, topic, payload): self.published.append((topic, payload))
     def close(self): self.closed = True
+
+class FakeCloud:
+    def __init__(self, bindings): self.binding_rows, self.posts = bindings, []
+    def bindings(self): return self.binding_rows
+    def post(self, kind, **values):
+        self.posts.append((kind, values))
+        return {"acceptedEventIds": [event["id"] for event in values.get("events", [])]}
+
+class FakeDiscovery:
+    def __init__(self, devices): self.devices = devices
+    def scan(self): return self.devices
+
+class FakeWorker:
+    def __init__(self, binding, access_code, *_args): self.binding, self.access_code, self.connected, self.started, self.stopped = binding, access_code, True, False, False
+    def start(self): self.started = True
+    def stop(self): self.stopped = True
 
 class GatewayTests(unittest.TestCase):
     def test_parses_response_without_credentials(self):
@@ -107,5 +126,38 @@ class GatewayTests(unittest.TestCase):
             self.assertEqual([item["id"] for item in outbox.load()],["one","two"])
             outbox.acknowledge({"one"})
             self.assertEqual(outbox.load(),[{"id":"two"}])
+
+    def test_durable_outbox_keeps_events_from_parallel_printers(self):
+        with tempfile.TemporaryDirectory() as folder:
+            outbox = DurableEventOutbox(f"{folder}/events.json")
+            threads = [threading.Thread(target=outbox.append, args=({"id":str(index)},)) for index in range(20)]
+            for thread in threads: thread.start()
+            for thread in threads: thread.join()
+            self.assertEqual({event["id"] for event in outbox.load()}, {str(index) for index in range(20)})
+
+    def test_local_hub_runs_multiple_bound_monitors_without_uploading_secrets(self):
+        devices = [DiscoveredPrinter("bambu:A", "A", "10.0.0.1", "Farm A1", "A1"), DiscoveredPrinter("bambu:B", "B", "10.0.0.2", "Farm P2S", "P2S")]
+        bindings = [{"bindingId":11,"deviceId":"bambu:A","serial":"A","host":"10.0.0.1"},{"bindingId":12,"deviceId":"bambu:B","serial":"B","host":"10.0.0.2"}]
+        credentials, cloud = MemoryCredentials(), FakeCloud(bindings)
+        credentials.set_access_code("bambu:A", "secret-a"); credentials.set_access_code("bambu:B", "secret-b")
+        with tempfile.TemporaryDirectory() as folder:
+            service = LocalHubService(cloud, credentials, folder, FakeMqtt, discovery=FakeDiscovery(devices), worker_factory=FakeWorker)
+            status = service.cycle()
+            self.assertEqual(status, {"discovered":2,"configured":2,"connected":2,"pendingCredentials":0})
+            self.assertEqual(set(service.workers), {11,12})
+            self.assertNotIn("secret-a", repr(cloud.posts)); self.assertNotIn("secret-b", repr(cloud.posts))
+            discovery_payload = cloud.posts[0][1]["devices"]
+            self.assertRegex(discovery_payload[0]["lastSeenAt"], r"^\d{4}-\d{2}-\d{2}T")
+            self.assertEqual([kind for kind,_ in cloud.posts], ["discovery","heartbeat"])
+            service.close()
+
+    def test_local_hub_reports_missing_local_credential_without_starting_worker(self):
+        device = DiscoveredPrinter("bambu:A", "A", "10.0.0.1", "Farm A1", "A1")
+        cloud = FakeCloud([{"bindingId":11,"deviceId":"bambu:A","serial":"A","host":"10.0.0.1"}])
+        with tempfile.TemporaryDirectory() as folder:
+            service = LocalHubService(cloud, MemoryCredentials(), folder, FakeMqtt, discovery=FakeDiscovery([device]), worker_factory=FakeWorker)
+            status = service.cycle()
+            self.assertEqual(status["pendingCredentials"], 1)
+            self.assertEqual(service.workers, {})
 
 if __name__ == "__main__": unittest.main()

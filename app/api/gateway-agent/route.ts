@@ -10,7 +10,7 @@ async function authorize(request:Request){const value=request.headers.get("autho
 const denied=()=>Response.json({error:"无效或已撤销的网关令牌"},{status:401});
 function publicData(value:unknown):unknown{if(Array.isArray(value))return value.map(publicData);if(value&&typeof value==="object")return Object.fromEntries(Object.entries(value as Record<string,unknown>).filter(([key])=>!/(access.?code|password|secret|token|credential)/i.test(key)).map(([key,item])=>[key,publicData(item)]));return value}
 
-export async function GET(request:Request){const gateway=await authorize(request);if(!gateway)return denied();return Response.json({mode:"monitor_only",commands:[]})}
+export async function GET(request:Request){const gateway=await authorize(request);if(!gateway)return denied();const db=getDb();const bindings=await db.select().from(printerBindings).where(eq(printerBindings.gatewayId,gateway.id));const discoveries=await db.select().from(gatewayDiscoveries).where(eq(gatewayDiscoveries.gatewayId,gateway.id));const bySerial=new Map(discoveries.map(item=>[item.deviceSerial,item]));return Response.json({mode:"monitor_only",commands:[],bindings:bindings.map(binding=>{const discovery=bySerial.get(binding.deviceSerial);return {bindingId:binding.id,deviceId:`bambu:${binding.deviceSerial.toUpperCase()}`,serial:binding.deviceSerial,model:binding.deviceModel,host:discovery?.host||"",status:binding.status}})})}
 
 export async function POST(request:Request){
   const gateway=await authorize(request);if(!gateway)return denied();

@@ -12,6 +12,8 @@ test("Bambu realtime gateway deduplicates discovery and keeps LAN credentials lo
   assert.match(migration,/printer_commands_idempotency_unique/);
   assert.match(agentRoute,/authorization/);
   assert.match(agentRoute,/printer\.materials/);
+  assert.match(agentRoute,/bindings:bindings\.map/);
+  assert.match(agentRoute,/deviceId:`bambu:/);
   assert.match(adminRoute,/pending_local_credential/);
   assert.doesNotMatch(agentRoute,/access.?code/i);
   assert.doesNotMatch(adminRoute,/body\.accessCode|accessCode:/);
