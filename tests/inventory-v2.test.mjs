@@ -41,7 +41,7 @@ test("legacy aggregate placeholders are isolated from sealed inventory and issue
  assert.match(page,/const sealed=useMemo\(\(\)=>data\?\.spools\.filter\(s=>s\.state==="sealed"\)/);
  assert.match(page,/legacy=useMemo\(\(\)=>data\?\.spools\.filter\(s=>s\.state==="needs_count"\)/);
  assert.match(page,/逐卷称重并登记真实卷码后才可领用/);
- assert.match(page,/\[\.\.\.open,\.\.\.sealed\]\.map/);
+ assert.match(page,/const eligible=useMemo\(\(\)=>\[\.\.\.open,\.\.\.sealed\]/);assert.match(page,/eligible\.map/);
 });
 
 test("legacy stock can only become an issueable spool through an audited physical count",async()=>{
@@ -50,4 +50,11 @@ test("legacy stock can only become an issueable spool through an audited physica
  assert.match(api,/inventory_v2\.legacy\.confirmed/);assert.match(api,/历史聚合库存实物盘点并转为实体卷/);
  assert.match(api,/INSERT INTO spool_weight_checks/);assert.match(api,/physicalState/);
  assert.match(page,/历史库存实物盘点/);assert.match(page,/盘点确认/);assert.match(page,/action:"confirmLegacySpool"/);
+});
+
+test("serialized spools expose offline labels and scanner-assisted issue selection",async()=>{
+ const [page,label,css,pkg]=await Promise.all([read("app/inventory/inventory-v2-client.tsx"),read("app/inventory/spool-label.tsx"),read("app/inventory/spool-label.css"),read("package.json")]);
+ assert.match(page,/扫码或输入实体卷码/);assert.match(page,/replace\(\/\^LT:SPOOL:\//);assert.match(page,/setIssueSpoolId/);
+ assert.match(page,/打印标签/);assert.match(label,/import\("qrcode"\)/);assert.match(label,/`LT:SPOOL:\$\{spool\.spoolCode\}`/);
+ assert.match(label,/不含任何设备密钥/);assert.match(css,/@media print/);assert.match(pkg,/"qrcode"/);
 });
