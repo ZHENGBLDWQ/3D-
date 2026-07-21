@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {evaluatePreflight,requiredMaterialGrams} from "../preflight/evaluate.ts";
 
-const input=(model="A1")=>({now:"2026-07-21T10:00:00.000Z",file:{complete:true,sliced:true,printerModel:model,nozzleMm:.4,buildPlate:"Textured PEI"},printer:{id:1,model,nozzleMm:.4,buildPlate:"Textured PEI",online:true,observedAt:"2026-07-21T09:59:00.000Z"},materialRequirements:[{slot:"A1",material:"PLA",slicedGrams:100,purgeGrams:10,safetyPercent:10,minimumReserveGrams:15}],materialSlots:[{slot:"A1",material:"PLA",remainingGrams:200}],order:{valid:true},permission:{canDispatch:true,canOverride:true}});
+const input=(model="A1")=>({now:"2026-07-21T10:00:00.000Z",file:{complete:true,sliced:true,printerModel:model,nozzleMm:.4,buildPlate:"Textured PEI"},printer:{id:1,model,nozzleMm:.4,buildPlate:"Textured PEI",online:true,observedAt:"2026-07-21T09:59:00.000Z"},materialRequirements:[{slot:"A1",material:"PLA",slicedGrams:100,purgeGrams:10,safetyPercent:10,minimumReserveGrams:15}],materialSlots:[{slot:"A1",material:"PLA",remainingGrams:200,observedAt:"2026-07-21T09:59:00.000Z"}],order:{valid:true},permission:{canDispatch:true,canOverride:true}});
 
 test("material requirement includes sliced, purge, safety and reserve",()=>assert.equal(requiredMaterialGrams(input().materialRequirements[0]),136));
 for(const model of ["A1","X2D","P2S"])test(`${model} fixture passes complete preflight`,()=>{const result=evaluatePreflight(input(model));assert.equal(result.level,"pass");assert.equal(result.dispatchAllowed,true)});

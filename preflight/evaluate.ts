@@ -25,6 +25,9 @@ export function evaluatePreflight(input:PreflightInput):PreflightResult{
     const slot=input.materialSlots.find(item=>item.slot===requirement.slot),needed=requiredMaterialGrams(requirement);
     if(!slot){checks.push(check("AMS_SLOT_MISSING","material","block",`AMS ${requirement.slot} 未装载所需耗材`,["装入并绑定耗材卷","更换 AMS 槽位"],{slot:requirement.slot,requiredGrams:needed}));continue;}
     if(!same(slot.material,requirement.material)){checks.push(check("MATERIAL_MISMATCH","material","block",`AMS ${slot.slot} 为 ${slot.material}，需要 ${requirement.material}`,["更换耗材卷","重新映射 AMS 槽位"]));continue;}
+    const slotObserved=slot.observedAt?new Date(slot.observedAt):null;
+    if(!slotObserved||Number.isNaN(slotObserved.valueOf()))checks.push(check("MATERIAL_DATA_UNKNOWN","material","unknown",`AMS ${slot.slot} 没有可靠的余量更新时间`,["刷新 AMS 状态"]));
+    else {const slotAge=(now.valueOf()-slotObserved.valueOf())/60000;if(slotAge>freshnessMinutes)checks.push(check("MATERIAL_DATA_STALE","material","warning",`AMS ${slot.slot} 数据已过期 ${Math.ceil(slotAge)} 分钟`,["刷新 AMS 状态"],{ageMinutes:slotAge}));}
     if(slot.remainingGrams==null){checks.push(check("MATERIAL_AMOUNT_UNKNOWN","material","unknown",`AMS ${slot.slot} 余量未知，需要 ${needed}g`,["称重或同步耗材余量"]));continue;}
     checks.push(slot.remainingGrams>=needed?check("MATERIAL_SUFFICIENT","material","pass",`AMS ${slot.slot} 余量充足：需要 ${needed}g，可用 ${slot.remainingGrams}g`,[],{requiredGrams:needed,remainingGrams:slot.remainingGrams}):check("MATERIAL_INSUFFICIENT","material","block",`AMS ${slot.slot} 耗材不足：需要 ${needed}g，可用 ${slot.remainingGrams}g`,["更换耗材卷","减少打印数量","重新切片"],{requiredGrams:needed,remainingGrams:slot.remainingGrams,shortageGrams:Number((needed-slot.remainingGrams).toFixed(2))}));
   }

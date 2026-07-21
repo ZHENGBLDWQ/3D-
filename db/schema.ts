@@ -80,6 +80,7 @@ export const materialBatches = sqliteTable("material_batches", {
 
 export const orders = sqliteTable("orders", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: integer("organization_id").references(() => organizations.id),
   orderNo: text("order_no").notNull().unique(),
   customer: text("customer").notNull(),
   status: text("status").notNull().default("待确认"),
@@ -91,6 +92,7 @@ export const orders = sqliteTable("orders", {
 
 export const printJobs = sqliteTable("print_jobs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: integer("organization_id").references(() => organizations.id),
   jobNo: text("job_no").notNull().unique(),
   itemId: integer("item_id").references(() => printItems.id),
   orderId: integer("order_id").references(() => orders.id),

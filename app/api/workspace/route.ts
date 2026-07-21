@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getD1, getDb } from "../../../db";
 import {
   materialBatches,
@@ -11,10 +11,11 @@ import {
   printers,
 } from "../../../db/schema";
 import { requireApiAccess } from "../../api-auth";
+import { getAccessContext } from "../../access-control";
 
 type Entity = "item" | "material" | "order" | "job";
 
-async function seedIfEmpty() {
+async function seedIfEmpty(organizationId: number) {
   const db = getDb();
   const existing = await db
     .select({ id: printItems.id })
@@ -52,18 +53,21 @@ async function seedIfEmpty() {
     .insert(orders)
     .values([
       {
+        organizationId,
         orderNo: "ORD-0268",
         customer: "星河机器人",
         status: "生产中",
         dueAt: "2026-07-20 18:00",
       },
       {
+        organizationId,
         orderNo: "ORD-0269",
         customer: "林工实验室",
         status: "待打印",
         dueAt: "2026-07-21",
       },
       {
+        organizationId,
         orderNo: "ORD-0270",
         customer: "创客空间",
         status: "待确认",
@@ -111,6 +115,7 @@ async function seedIfEmpty() {
   ]);
   await db.insert(printJobs).values([
     {
+      organizationId,
       jobNo: "JOB-042",
       itemId: insertedItems[0].id,
       orderId: insertedOrders[0].id,
@@ -119,6 +124,7 @@ async function seedIfEmpty() {
       progress: 68,
     },
     {
+      organizationId,
       jobNo: "JOB-043",
       itemId: insertedItems[1].id,
       orderId: insertedOrders[1].id,
@@ -127,6 +133,7 @@ async function seedIfEmpty() {
       progress: 12,
     },
     {
+      organizationId,
       jobNo: "JOB-044",
       itemId: insertedItems[2].id,
       orderId: insertedOrders[2].id,
@@ -141,7 +148,9 @@ export async function GET() {
   const denied = await requireApiAccess();
   if (denied) return denied;
   try {
-    await seedIfEmpty();
+    const context = await getAccessContext();
+    if (!context) return Response.json({ error: "请先登录" }, { status: 401 });
+    await seedIfEmpty(context.organizationId);
     const db = getDb();
     const [items, materials, orderRows, jobs, printerRows, orderLines, productionFiles, materialRequirements] = await Promise.all([
       db.select().from(printItems).orderBy(desc(printItems.createdAt)),
@@ -326,6 +335,8 @@ export async function POST(request: Request) {
   const denied = await requireApiAccess(true);
   if (denied) return denied;
   try {
+    const context = await getAccessContext();
+    if (!context) return Response.json({ error: "请先登录" }, { status: 401 });
     const payload = (await request.json()) as Record<string, unknown> & {
       entity?: Entity;
     };
@@ -369,6 +380,7 @@ export async function POST(request: Request) {
       const [row] = await db
         .insert(orders)
         .values({
+          organizationId: context.organizationId,
           orderNo: String(payload.orderNo),
           customer: String(payload.customer),
           status: String(payload.status || "待确认"),
@@ -392,7 +404,7 @@ export async function POST(request: Request) {
       if (!printer || printer.status === "停用") return Response.json({ error: "所选打印机不存在或已停用" }, { status: 400 });
       const item = itemId ? (await db.select({ estimatedMinutes: printItems.estimatedMinutes }).from(printItems).where(eq(printItems.id, itemId)).limit(1))[0] : null;
       if (itemId && !item) return Response.json({ error: "所选打印物品不存在" }, { status: 400 });
-      if (orderId && !(await db.select({ id: orders.id }).from(orders).where(eq(orders.id, orderId)).limit(1)).length) return Response.json({ error: "所选订单不存在" }, { status: 400 });
+      if (orderId && !(await db.select({ id: orders.id }).from(orders).where(and(eq(orders.id, orderId),eq(orders.organizationId, context.organizationId))).limit(1)).length) return Response.json({ error: "所选订单不存在或不属于当前组织" }, { status: 400 });
       if (orderId && itemId && !(await db.select({ itemId: orderItems.itemId }).from(orderItems).where(eq(orderItems.orderId, orderId))).some((row) => row.itemId === itemId)) return Response.json({ error: "所选物品不属于该订单" }, { status: 400 });
       if (fileId) {
         const [file] = await db.select({ itemId: printFiles.itemId, kind: printFiles.kind }).from(printFiles).where(eq(printFiles.id, fileId)).limit(1);
@@ -431,6 +443,7 @@ export async function POST(request: Request) {
       const [row] = await db
         .insert(printJobs)
         .values({
+          organizationId: context.organizationId,
           jobNo: String(payload.jobNo),
           itemId,
           orderId,
