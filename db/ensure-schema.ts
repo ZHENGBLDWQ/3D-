@@ -27,13 +27,14 @@ import migration0024 from "../drizzle/0024_slicing_center.sql?raw";
 import migration0025 from "../drizzle/0025_preflight_center.sql?raw";
 import migration0026 from "../drizzle/0026_order_organization_scope.sql?raw";
 import migration0027 from "../drizzle/0027_intelligent_scheduling.sql?raw";
+import migration0028 from "../drizzle/0028_dispatch_orchestration.sql?raw";
 
 const migrations = [
   migration0000,migration0001,migration0002,migration0003,migration0004,
   migration0005,migration0006,migration0007,migration0008,migration0009,
   migration0010,migration0011,migration0012,migration0013,migration0014,
-  migration0015,migration0016,migration0017,migration0018,migration0019,migration0020,migration0021,migration0022,migration0023,migration0024,migration0025,migration0026,migration0027,
-];
+  migration0015,migration0016,migration0017,migration0018,migration0019,migration0020,migration0021,migration0022,migration0023,migration0024,migration0025,migration0026,migration0027,migration0028,
+].map((sql,id)=>({id,sql}));
 
 let schemaPromise: Promise<void> | null = null;
 
@@ -45,10 +46,10 @@ function isSafeExistingSchemaError(error: unknown) {
 async function applyMigrations() {
   const db = getD1();
   await db.prepare("CREATE TABLE IF NOT EXISTS layertrace_migrations (id INTEGER PRIMARY KEY,applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
-  for (let index=0; index<migrations.length; index++) {
-    const applied = await db.prepare("SELECT id FROM layertrace_migrations WHERE id=?").bind(index).first();
+  for (const migration of migrations) {
+    const applied = await db.prepare("SELECT id FROM layertrace_migrations WHERE id=?").bind(migration.id).first();
     if (applied) continue;
-    const statements = migrations[index].split("--> statement-breakpoint").map(statement=>statement.trim()).filter(Boolean);
+    const statements = migration.sql.split("--> statement-breakpoint").map((statement:string)=>statement.trim()).filter(Boolean);
     for (const statement of statements) {
       try {
         await db.prepare(statement).run();
@@ -56,7 +57,7 @@ async function applyMigrations() {
         if (!isSafeExistingSchemaError(error)) throw error;
       }
     }
-    await db.prepare("INSERT OR IGNORE INTO layertrace_migrations(id) VALUES(?)").bind(index).run();
+    await db.prepare("INSERT OR IGNORE INTO layertrace_migrations(id) VALUES(?)").bind(migration.id).run();
   }
 }
 

@@ -513,8 +513,6 @@ export const preflightRuns = sqliteTable("preflight_runs", {
 });
 export const preflightChecks = sqliteTable("preflight_checks", {id:integer("id").primaryKey({autoIncrement:true}),runId:integer("run_id").notNull().references(()=>preflightRuns.id,{onDelete:"cascade"}),code:text("code").notNull(),category:text("category").notNull(),level:text("level").notNull(),message:text("message").notNull(),details:text("details").notNull().default("{}"),resolutionActions:text("resolution_actions").notNull().default("[]")});
 export const preflightOverrides = sqliteTable("preflight_overrides", {id:integer("id").primaryKey({autoIncrement:true}),runId:integer("run_id").notNull().references(()=>preflightRuns.id,{onDelete:"cascade"}),actorEmail:text("actor_email").notNull(),reason:text("reason").notNull(),createdAt:text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`)});
-export const dispatchAttempts = sqliteTable("dispatch_attempts", {id:integer("id").primaryKey({autoIncrement:true}),runId:integer("run_id").notNull().references(()=>preflightRuns.id,{onDelete:"cascade"}),printerId:integer("printer_id").notNull().references(()=>printers.id),allowed:integer("allowed",{mode:"boolean"}).notNull().default(false),reason:text("reason").notNull().default(""),actorEmail:text("actor_email").notNull(),createdAt:text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`)});
-
 export const productionPlans = sqliteTable("production_plans", {
   id: integer("id").primaryKey({ autoIncrement: true }), organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
   planNo: text("plan_no").notNull().unique(), status: text("status").notNull().default("draft"), mode: text("mode").notNull().default("recommend_only"),
@@ -533,4 +531,39 @@ export const scheduleConflicts = sqliteTable("schedule_conflicts", {
 });
 export const scheduleRevisions = sqliteTable("schedule_revisions", {
   id: integer("id").primaryKey({ autoIncrement: true }), planId: integer("plan_id").notNull().references(() => productionPlans.id, { onDelete: "cascade" }), revisionNo: integer("revision_no").notNull(), snapshot: text("snapshot").notNull(), reason: text("reason").notNull().default(""), createdBy: text("created_by").notNull(), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const dispatchAttempts = sqliteTable("dispatch_attempts", {id:integer("id").primaryKey({autoIncrement:true}),runId:integer("run_id").notNull().references(()=>preflightRuns.id,{onDelete:"cascade"}),printerId:integer("printer_id").notNull().references(()=>printers.id),allowed:integer("allowed",{mode:"boolean"}).notNull().default(false),reason:text("reason").notNull().default(""),actorEmail:text("actor_email").notNull(),workflowId:integer("workflow_id"),createdAt:text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`)});
+
+export const dispatchWorkflows = sqliteTable("dispatch_workflows", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  workflowKey: text("workflow_key").notNull().unique(),
+  preflightRunId: integer("preflight_run_id").notNull().references(() => preflightRuns.id),
+  jobId: integer("job_id").notNull().references(() => printJobs.id),
+  printerId: integer("printer_id").notNull().references(() => printers.id),
+  commandId: integer("command_id").references(() => printerCommands.id).unique(),
+  status: text("status").notNull().default("reserved"),
+  preflightLevel: text("preflight_level").notNull(),
+  overrideId: integer("override_id").references(() => preflightOverrides.id),
+  actorEmail: text("actor_email").notNull(),
+  errorCode: text("error_code"),
+  errorMessage: text("error_message"),
+  startedAt: text("started_at"), completedAt: text("completed_at"), cancelledAt: text("cancelled_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const materialReservations = sqliteTable("material_reservations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  workflowId: integer("workflow_id").notNull().references(() => dispatchWorkflows.id, { onDelete: "cascade" }),
+  jobId: integer("job_id").notNull().references(() => printJobs.id),
+  printerId: integer("printer_id").notNull().references(() => printers.id),
+  batchId: integer("batch_id").notNull().references(() => materialBatches.id),
+  slot: text("slot").notNull(), material: text("material").notNull(), grams: real("grams").notNull(),
+  status: text("status").notNull().default("reserved"), releasedReason: text("released_reason").notNull().default(""),
+  allocatedAt: text("allocated_at"), issuedAt: text("issued_at"), releasedAt: text("released_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
