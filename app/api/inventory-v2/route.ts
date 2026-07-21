@@ -20,7 +20,7 @@ export async function GET(){
       COALESCE(SUM(remaining_net_grams),0) assetGrams,
       COALESCE(SUM(CASE WHEN state='needs_count' THEN 1 ELSE 0 END),0) needsCount
       FROM material_spools WHERE organization_id=? AND state NOT IN ('empty','scrapped')`).bind(org).first(),
-    db.prepare(`SELECT c.id,c.catalog_code catalogCode,c.brand,c.series,c.material,c.color_name colorName,c.color_code colorCode,c.color_hex colorHex,c.default_net_grams defaultNetGrams,c.default_tare_grams defaultTareGrams,c.ams_compatibility amsCompatibility,c.tags,
+    db.prepare(`SELECT c.id,c.catalog_code catalogCode,c.brand,c.series,c.material,c.color_name colorName,c.color_name_en colorNameEn,c.color_code colorCode,c.color_hex colorHex,c.density_g_cm3 densityGcm3,c.default_net_grams defaultNetGrams,c.default_tare_grams defaultTareGrams,c.ams_compatibility amsCompatibility,c.tags,
       COALESCE(SUM(CASE WHEN s.state='sealed' THEN 1 ELSE 0 END),0) sealedCount,
       COALESCE(SUM(CASE WHEN s.state='sealed' THEN s.remaining_net_grams ELSE 0 END),0) sealedGrams,
       COALESCE(SUM(CASE WHEN s.state IN ('open_storage','in_use') THEN s.remaining_net_grams ELSE 0 END),0) openedGrams,
@@ -64,6 +64,12 @@ export async function POST(request:Request){
   const context=await getAccessContext();if(!context)return fail("请先登录",401);
   const body=await request.json() as Record<string,unknown>,action=text(body.action,40),db=getD1(),org=context.organizationId,now=new Date().toISOString();
   try{
+    if(action==="saveCatalog"){
+      const catalogId=id(body.catalogId),catalogCode=text(body.catalogCode,80).toUpperCase(),brand=text(body.brand,80),series=text(body.series,80),material=text(body.material,40).toUpperCase(),colorName=text(body.colorName,80),colorNameEn=text(body.colorNameEn,80),colorCode=text(body.colorCode,80).toUpperCase(),rawHex=text(body.colorHex,12).replace("#","").toUpperCase(),density=Number(body.densityGcm3),net=grams(body.defaultNetGrams),tare=grams(body.defaultTareGrams),amsCompatibility=text(body.amsCompatibility,20),tags=text(body.tags,500).split(/[,，]/).map(item=>item.trim()).filter(Boolean).slice(0,20);
+      if(!catalogCode||!brand||!material||!colorName||!/^[0-9A-F]{6}$/.test(rawHex)||!Number.isFinite(density)||density<=0||net<=0||tare<0||!["compatible","incompatible","conditional","unknown"].includes(amsCompatibility))return fail("请完整填写目录编码、品牌、材质、颜色、色值、密度和重量参数");
+      if(catalogId){const owned=await db.prepare("SELECT id FROM material_catalog_items WHERE id=? AND organization_id=?").bind(catalogId,org).first();if(!owned)return fail("耗材目录不存在",404);await db.prepare("UPDATE material_catalog_items SET catalog_code=?,brand=?,series=?,material=?,color_name=?,color_name_en=?,color_code=?,color_hex=?,density_g_cm3=?,default_net_grams=?,default_tare_grams=?,ams_compatibility=?,tags=?,updated_at=? WHERE id=? AND organization_id=?").bind(catalogCode,brand,series,material,colorName,colorNameEn,colorCode,rawHex,density,net,tare,amsCompatibility,JSON.stringify(tags),now,catalogId,org).run();await recordAudit(context,"inventory_v2.catalog.updated","material_catalog_item",String(catalogId),{catalogCode,brand,material,colorCode,rawHex});return Response.json({id:catalogId});}
+      const row=await db.prepare("INSERT INTO material_catalog_items(organization_id,catalog_code,brand,series,material,color_name,color_name_en,color_code,color_hex,density_g_cm3,default_net_grams,default_tare_grams,ams_compatibility,tags) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id").bind(org,catalogCode,brand,series,material,colorName,colorNameEn,colorCode,rawHex,density,net,tare,amsCompatibility,JSON.stringify(tags)).first<{id:number}>();await recordAudit(context,"inventory_v2.catalog.created","material_catalog_item",String(row!.id),{catalogCode,brand,material,colorCode,rawHex});return Response.json({id:row!.id},{status:201});
+    }
     if(action==="receiveSpool"){
       const catalogItemId=id(body.catalogItemId),net=grams(body.netGrams),tare=grams(body.tareGrams),spoolCode=text(body.spoolCode,80).toUpperCase();if(!catalogItemId||net<=0||tare<0||!spoolCode)return fail("请填写耗材、卷码、净重和空盘重量");
       const owned=await db.prepare("SELECT id FROM material_catalog_items WHERE id=? AND organization_id=?").bind(catalogItemId,org).first();if(!owned)return fail("耗材目录不存在",404);
