@@ -1,0 +1,12 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {readFile} from "node:fs/promises";
+const read=path=>readFile(new URL(`../${path}`,import.meta.url),"utf8");
+
+test("material import review migration is registered and organization scoped",async()=>{const [ensure,migration,schema]=await Promise.all([read("db/ensure-schema.ts"),read("drizzle/0045_material_master_import_review.sql"),read("db/schema.ts")]);assert.match(ensure,/migration0045/);assert.match(ensure,/id:45,sql:migration0045/);assert.match(migration,/material_catalog_import_batches/);assert.match(migration,/organization_id/);assert.match(migration,/CHECK \(`status` IN \('pending','applied','cancelled'\)\)/);assert.match(schema,/sqliteTable\("material_catalog_import_batches"/)});
+
+test("CSV import parser validates required fields and safe limits",async()=>{const [parser,api]=await Promise.all([read("materials/catalog-import.ts"),read("app/api/material-master/route.ts")]);for(const field of ["catalogCode","colorHex","densityGcm3","defaultNetGrams","amsCompatibility"])assert.match(parser,new RegExp(field));assert.match(parser,/quoted/);assert.match(parser,/6 位 HEX/);assert.match(api,/csv\.length>1_000_000/);assert.match(api,/parsed\.length>500/)});
+
+test("preview and apply form an audited two-step workflow",async()=>{const api=await read("app/api/material-master/route.ts");assert.match(api,/action==="previewImport"/);assert.match(api,/action==="applyImport"/);assert.match(api,/status!=="pending"/);assert.match(api,/数据已变化或仍有拒绝项/);assert.match(api,/material_master\.import\.previewed/);assert.match(api,/material_master\.import\.applied/);assert.match(api,/WHERE id=\? AND organization_id=\?/)});
+
+test("bulk import cannot overwrite official verified records",async()=>{const [api,client]=await Promise.all([read("app/api/material-master/route.ts"),read("app/material-master/material-master-client.tsx")]);assert.match(api,/officialVerified.*官方核验记录不可由批量导入覆盖/);assert.match(api,/WHERE material_catalog_items\.official_verified=0/);assert.match(client,/先预览再应用/);assert.match(client,/确认应用变更/);assert.match(client,/review\.summary\.rejected>0/);assert.match(client,/下载 CSV 模板/)});
