@@ -1,0 +1,12 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {readFile} from "node:fs/promises";
+const read=path=>readFile(new URL(`../${path}`,import.meta.url),"utf8");
+
+test("material master migration records provenance and organization-scoped aliases",async()=>{const [ensure,migration,schema]=await Promise.all([read("db/ensure-schema.ts"),read("drizzle/0044_material_master_data.sql"),read("db/schema.ts")]);assert.match(ensure,/migration0044/);assert.match(ensure,/id:44,sql:migration0044/);for(const field of ["source_type","source_url","source_checked_at","official_verified"])assert.match(migration,new RegExp(field));assert.match(migration,/CREATE TABLE `material_catalog_aliases`/);assert.match(migration,/MATERIAL_CATALOG_ALIAS_ORGANIZATION_MISMATCH/);assert.match(migration,/material_catalog_alias_lookup_idx/);assert.match(schema,/sqliteTable\("material_catalog_aliases"/)});
+
+test("official starter is a dated traceable snapshot, not an unverified scraper",async()=>{const [data,api]=await Promise.all([read("materials/bambu-official.ts"),read("app/api/material-master/route.ts")]);assert.match(data,/jp\.store\.bambulab\.com/);assert.match(data,/BAMBU_SOURCE_CHECKED_AT="2026-07-22"/);for(const value of ["10100","10101","FFFFFF","000000","C12E1F","EC008C"])assert.match(data,new RegExp(value));assert.match(api,/source_type/);assert.match(api,/official_verified/);assert.match(api,/ON CONFLICT\(organization_id,catalog_code\)/);assert.match(api,/recordAudit/)});
+
+test("master API normalizes aliases and never crosses organization boundaries",async()=>{const api=await read("app/api/material-master/route.ts");assert.match(api,/requireApiAccess\(true,"inventory\.write"\)/);assert.match(api,/WHERE organization_id=\?/);assert.match(api,/WHERE id=\? AND organization_id=\?/);assert.match(api,/color_hex.*replace\("#",""\)\.toUpperCase/);assert.match(api,/INSERT OR IGNORE INTO material_catalog_aliases/)});
+
+test("master UI explains source freshness and alias-driven device matching",async()=>{const [client,wizard,inventory]=await Promise.all([read("app/material-master/material-master-client.tsx"),read("app/feed-bindings/feed-binding-client.tsx"),read("app/inventory/inventory-v2-client.tsx")]);assert.match(client,/官方快照来源/);assert.match(client,/核验日期/);assert.match(client,/商品颜色会调整/);assert.match(client,/添加设备识别别名/);assert.match(wizard,/材质别名一致/);assert.match(wizard,/\/api\/material-master/);assert.match(wizard,/Promise\.all/);assert.match(inventory,/颜色主数据/)});
