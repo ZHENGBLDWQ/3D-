@@ -30,7 +30,7 @@ export default function InventoryV2Client(){
  if(!data)return <main className="inventory-v2-page"><p className="loading">{error||"正在加载耗材库存…"}</p></main>;
  const low=data.catalog.filter(c=>c.lowStockGrams>0&&c.sealedGrams<=c.lowStockGrams),printerIds=data.printers;
  return <main className="inventory-v2-page">
-  <header className="inventory-header"><div><h1>耗材库存</h1><p>未拆封仓库账与在机实体卷分开管理，每次领用、退回、消耗和称重均可追溯。</p></div><div><a href="/material-variances">差异处理中心</a> <a href="/">返回工作台</a></div></header>
+  <header className="inventory-header"><div><h1>耗材库存</h1><p>未拆封仓库账与在机实体卷分开管理，每次领用、退回、消耗和称重均可追溯。</p></div><div><a href="/feed-bindings">实体卷绑定向导</a> <a href="/material-variances">差异处理中心</a> <a href="/">返回工作台</a></div></header>
   {error&&<div className="inventory-error">{error}</div>}
   <nav className="inventory-tabs" aria-label="耗材库存主区"><button className={tab==="stock"?"active":""} onClick={()=>setTab("stock")}><span>库存管理</span><small>未拆封 · 采购 · 流水</small></button><button className={tab==="active"?"active":""} onClick={()=>setTab("active")}><span>使用中</span><small>在机 · 周转 · 实时结算</small></button></nav>
   <section className="inventory-kpis"><article><span>未拆封</span><b>{data.summary.sealedSpools}</b><small>{Number(data.summary.sealedGrams).toFixed(0)} g</small></article><article><span>使用中</span><b>{data.summary.inUseSpools}</b><small>实体卷</small></article><article><span>开封周转</span><b>{data.summary.openSpools}</b><small>实体卷</small></article><article><span>组织耗材资产</span><b>{(Number(data.summary.assetGrams)/1000).toFixed(2)}</b><small>kg</small></article><article className={data.summary.needsCount?"warn":""}><span>待盘点迁移</span><b>{data.summary.needsCount}</b><small>旧聚合库存</small></article></section>
