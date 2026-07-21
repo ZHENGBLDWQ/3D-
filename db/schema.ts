@@ -573,8 +573,20 @@ export const dispatchWorkflows = sqliteTable("dispatch_workflows", {
   errorCode: text("error_code"),
   errorMessage: text("error_message"),
   startedAt: text("started_at"), completedAt: text("completed_at"), cancelledAt: text("cancelled_at"),
+  lastEventAt: text("last_event_at"), settledAt: text("settled_at"), settlementEventId: text("settlement_event_id").unique(),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const executionEvents = sqliteTable("execution_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  workflowId: integer("workflow_id").references(() => dispatchWorkflows.id, { onDelete: "set null" }),
+  printerEventId: integer("printer_event_id").notNull().references(() => printerEvents.id, { onDelete: "cascade" }).unique(),
+  eventId: text("event_id").notNull().unique(), printerId: integer("printer_id").notNull().references(() => printers.id, { onDelete: "cascade" }),
+  bindingId: integer("binding_id").notNull().references(() => printerBindings.id, { onDelete: "cascade" }), deviceStatus: text("device_status").notNull(),
+  occurredAt: text("occurred_at").notNull(), outcome: text("outcome").notNull(), details: text("details").notNull().default("{}"),
+  processedAt: text("processed_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const materialReservations = sqliteTable("material_reservations", {

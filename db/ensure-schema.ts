@@ -28,6 +28,7 @@ import migration0025 from "../drizzle/0025_preflight_center.sql?raw";
 import migration0026 from "../drizzle/0026_order_organization_scope.sql?raw";
 import migration0027 from "../drizzle/0027_intelligent_scheduling.sql?raw";
 import migration0028 from "../drizzle/0028_dispatch_orchestration.sql?raw";
+import migration0029 from "../drizzle/0029_execution_sync.sql?raw";
 import migration0030 from "../drizzle/0030_quality_material_settlement.sql?raw";
 import migration0031 from "../drizzle/0031_profit_analytics.sql?raw";
 
@@ -35,7 +36,7 @@ const baseMigrations = [
   migration0000,migration0001,migration0002,migration0003,migration0004,
   migration0005,migration0006,migration0007,migration0008,migration0009,
   migration0010,migration0011,migration0012,migration0013,migration0014,
-  migration0015,migration0016,migration0017,migration0018,migration0019,migration0020,migration0021,migration0022,migration0023,migration0024,migration0025,migration0026,migration0027,migration0028,
+  migration0015,migration0016,migration0017,migration0018,migration0019,migration0020,migration0021,migration0022,migration0023,migration0024,migration0025,migration0026,migration0027,migration0028,migration0029,
 ].map((sql,id)=>({id,sql}));
 const migrations = [...baseMigrations,{id:30,sql:migration0030},{id:31,sql:migration0031}];
 
