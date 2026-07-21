@@ -98,6 +98,7 @@ export async function PATCH(request:Request){
       const duplicate=await db.prepare("SELECT id,receipt_no receiptNo FROM goods_receipts WHERE organization_id=? AND idempotency_key=?").bind(org,key).first();if(duplicate)return Response.json({...duplicate,idempotent:true});
       const row=await db.prepare(`SELECT po.status,poi.id itemId,poi.batch_id batchId,poi.ordered_grams orderedGrams,poi.received_grams receivedGrams
         FROM purchase_orders po JOIN purchase_order_items poi ON poi.purchase_order_id=po.id AND poi.organization_id=po.organization_id
+        JOIN material_batch_organizations mbo ON mbo.batch_id=poi.batch_id AND mbo.organization_id=po.organization_id
         WHERE po.id=? AND poi.id=? AND po.organization_id=?`).bind(orderId,itemId,org).first<{status:PurchaseStatus;itemId:number;batchId:number;orderedGrams:number;receivedGrams:number}>();
       if(!row)return fail("采购订单明细不存在或不属于当前组织",404);if(!["ordered","partially_received"].includes(row.status))return fail("当前订单状态不能收货",409);if(row.receivedGrams+grams>row.orderedGrams+0.0001)return fail("收货数量超过未收数量",409);
       const all=(await db.prepare("SELECT ordered_grams orderedGrams,received_grams receivedGrams,id FROM purchase_order_items WHERE purchase_order_id=? AND organization_id=?").bind(orderId,org).all<{orderedGrams:number;receivedGrams:number;id:number}>()).results??[];

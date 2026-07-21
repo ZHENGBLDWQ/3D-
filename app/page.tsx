@@ -370,6 +370,9 @@ function HomeWorkspace() {
             <a className="main-nav-link" href="/maintenance" title="设备维护"><span>⚒</span><em>设备维护</em></a>
             <a className="main-nav-link" href="/alerts" title="告警中心"><span>!</span><em>告警中心</em></a>
             <a className="main-nav-link" href="/reports" title="经营报表"><span>≡</span><em>经营报表</em></a>
+            <a className="main-nav-link" href="/procurement" title="采购补货"><span>↓</span><em>采购补货</em></a>
+            <a className="main-nav-link" href="/quotes" title="客户报价"><span>¥</span><em>客户报价</em></a>
+            <a className="main-nav-link" href="/recovery" title="备份恢复"><span>↻</span><em>备份恢复</em></a>
             <button className={section==="系统中心"?"nav-active":""} aria-current={section==="系统中心"?"page":undefined} title="系统中心" onClick={()=>setSection("系统中心")}><span>⚙</span><em>系统中心</em></button>
           </div>
         </nav>
