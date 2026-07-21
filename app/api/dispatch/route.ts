@@ -28,8 +28,13 @@ async function workflowResponse(workflowKey:string){
 export async function GET(){
   const denied=await requireApiAccess();if(denied)return denied;
   const context=await getAccessContext();if(!context)return jsonError("请先登录",401);
-  const rows=await getD1().prepare("SELECT id,workflow_key,preflight_run_id,job_id,printer_id,command_id,status,preflight_level,created_at FROM dispatch_workflows WHERE organization_id=? ORDER BY id DESC LIMIT 50").bind(context.organizationId).all();
-  return Response.json({workflows:rows.results??[]});
+  const db=getD1();
+  const [workflows,runs,jobs]=await Promise.all([
+    db.prepare("SELECT id,workflow_key,preflight_run_id,job_id,printer_id,command_id,status,preflight_level,created_at FROM dispatch_workflows WHERE organization_id=? ORDER BY id DESC LIMIT 50").bind(context.organizationId).all(),
+    db.prepare("SELECT id,run_id,printer_id,level,dispatch_allowed,override_allowed,evaluated_at FROM preflight_runs WHERE organization_id=? ORDER BY id DESC LIMIT 50").bind(context.organizationId).all(),
+    db.prepare("SELECT id,job_no,printer_id,status FROM print_jobs WHERE organization_id=? AND status IN ('排队','待下发') ORDER BY id DESC LIMIT 100").bind(context.organizationId).all(),
+  ]);
+  return Response.json({workflows:workflows.results??[],runs:runs.results??[],jobs:jobs.results??[]});
 }
 
 export async function POST(request:Request){

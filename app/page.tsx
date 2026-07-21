@@ -362,6 +362,8 @@ function HomeWorkspace() {
             <a className="main-nav-link" href="/gateways" title="通信网关"><span>⌁</span><em>通信网关</em></a>
             <a className="main-nav-link" href="/slicing" title="切片中心"><span>◫</span><em>切片中心</em></a>
             <a className="main-nav-link" href="/preflight" title="下发预检"><span>✓</span><em>下发预检</em></a>
+            <a className="main-nav-link" href="/scheduling" title="智能排产"><span>⌘</span><em>智能排产</em></a>
+            <a className="main-nav-link" href="/dispatch" title="下发工作流"><span>⇢</span><em>下发工作流</em></a>
             <button className={section==="系统中心"?"nav-active":""} aria-current={section==="系统中心"?"page":undefined} title="系统中心" onClick={()=>setSection("系统中心")}><span>⚙</span><em>系统中心</em></button>
           </div>
         </nav>

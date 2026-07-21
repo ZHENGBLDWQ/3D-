@@ -55,5 +55,6 @@ test("migration and API enforce atomic idempotency, stock and organization bound
   assert.match(api,/pb\.organization_id=\?/);
   assert.match(api,/preflight_runs WHERE organization_id=\?/);
   assert.match(api,/eligibleReservationStates/);
-  assert.match(ensure,/id:28,sql:migration0028/);
+  assert.match(ensure,/migration0027,migration0028/);
+  assert.match(ensure,/\.map\(\(sql,id\)=>\(\{id,sql\}\)\)/);
 });
