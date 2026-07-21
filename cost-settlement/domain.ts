@@ -2,14 +2,15 @@ export const PURPOSES=["model","support","support_interface","purge","wipe_tower
 export const TOOLHEADS=["main","auxiliary","left","right","unknown"] as const;
 export type SliceUsage={plate:number;filament:number;toolhead:string;feature:string;estimatedGrams:number};
 export type SliceLayer={plate:number;layer:number;cumulativeGramsByFeature:Record<string,number>};
+type SlicePayloadInput={protocol?:unknown;source?:{fileName?:unknown;observedAt?:unknown};file?:{format?:unknown;fingerprint?:unknown;byteLength?:unknown;plateCount?:unknown};usage?:unknown;layers?:unknown};
 
 export function validateSlicePayload(input:unknown){
- const p=input as Record<string,any>;if(!p||p.protocol!=="layertrace.slice-metadata/v1")throw new Error("SLICE_PROTOCOL_UNSUPPORTED");
+ const p=input as SlicePayloadInput;if(!p||p.protocol!=="layertrace.slice-metadata/v1")throw new Error("SLICE_PROTOCOL_UNSUPPORTED");
  if(!/^[a-f0-9]{64}$/i.test(String(p.file?.fingerprint||"")))throw new Error("SLICE_FINGERPRINT_INVALID");
  if(!["3mf","gcode"].includes(String(p.file?.format||"")))throw new Error("SLICE_FORMAT_INVALID");
  if(!Array.isArray(p.usage)||!p.usage.length||p.usage.length>500)throw new Error("SLICE_USAGE_INVALID");
  if(!Array.isArray(p.layers)||p.layers.length>5000||JSON.stringify(p).length>1500000)throw new Error("SLICE_LAYERS_INVALID");
- const usage:SliceUsage[]=p.usage.map((row:Record<string,unknown>)=>{const plate=Number(row.plate),filament=Number(row.filament),estimatedGrams=Number(row.estimatedGrams),feature=String(row.feature),toolhead=String(row.toolhead);if(!Number.isInteger(plate)||plate<0||!Number.isInteger(filament)||filament<0||!Number.isFinite(estimatedGrams)||estimatedGrams<0||!PURPOSES.includes(feature as any)||!TOOLHEADS.includes(toolhead as any))throw new Error("SLICE_USAGE_ROW_INVALID");return{plate,filament,estimatedGrams,feature,toolhead}});
+ const usage:SliceUsage[]=p.usage.map((row:Record<string,unknown>)=>{const plate=Number(row.plate),filament=Number(row.filament),estimatedGrams=Number(row.estimatedGrams),feature=String(row.feature),toolhead=String(row.toolhead);if(!Number.isInteger(plate)||plate<0||!Number.isInteger(filament)||filament<0||!Number.isFinite(estimatedGrams)||estimatedGrams<0||!PURPOSES.some(value=>value===feature)||!TOOLHEADS.some(value=>value===toolhead))throw new Error("SLICE_USAGE_ROW_INVALID");return{plate,filament,estimatedGrams,feature,toolhead}});
  return{protocol:p.protocol,source:{fileName:String(p.source?.fileName||"").slice(0,240),observedAt:String(p.source?.observedAt||new Date().toISOString())},file:{format:String(p.file.format),fingerprint:String(p.file.fingerprint).toLowerCase(),byteLength:Number(p.file.byteLength||0),plateCount:Number(p.file.plateCount||0)},usage,layers:p.layers as SliceLayer[]};
 }
 
