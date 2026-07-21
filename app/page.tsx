@@ -2136,6 +2136,8 @@ function FileAssets({
     } else toast("删除失败");
   }
   async function dispatch(file: PrintFile) {
+    toast("当前为只读监控模式，请在 Bambu Studio 中发送并打印");
+    return;
     if (!printers.length) {
       toast("请先在设备管理中添加并连接打印机");
       return;
@@ -2253,7 +2255,7 @@ function FileAssets({
               </div>
               <div className="file-actions">
                 {["G-code", "3MF"].includes(file.kind) && (
-                  <button onClick={() => dispatch(file)}>发送并打印</button>
+                  <span className="muted">请在 Bambu Studio 中发送打印</span>
                 )}
                 <a href={`/api/files?download=${file.id}`}>下载</a>
                 <button onClick={() => remove(file.id)}>删除</button>
@@ -2604,6 +2606,8 @@ function PrinterManager({ toast }: { toast: (m: string) => void }) {
     printer: Printer,
     name: "pause" | "resume" | "cancel",
   ) {
+    toast("当前为只读监控模式，请在 Bambu Studio 或打印机上操作");
+    return;
     const labels = { pause: "暂停", resume: "继续", cancel: "取消" };
     if (
       name === "cancel" &&
@@ -2792,14 +2796,7 @@ function PrinterManager({ toast }: { toast: (m: string) => void }) {
                 <button onClick={() => connect(p)}>连接代理</button>
                 {p.connectionState !== "未连接" && (
                   <>
-                    <button onClick={() => command(p, "pause")}>暂停</button>
-                    <button onClick={() => command(p, "resume")}>继续</button>
-                    <button
-                      className="danger-link"
-                      onClick={() => command(p, "cancel")}
-                    >
-                      取消打印
-                    </button>
+                    <span className="muted">设备操作请使用 Bambu Studio</span>
                   </>
                 )}
                 <button onClick={() => status(p, "维护中")}>维护</button>

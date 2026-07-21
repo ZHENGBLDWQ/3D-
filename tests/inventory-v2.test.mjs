@@ -21,7 +21,7 @@ test("issue and return move a serialized spool without reducing organization ass
 
 test("unknown AMS slots remain warnings and can never guess a spool deduction",async()=>{
  const api=await read("app/api/inventory-v2/route.ts"),page=await read("app/inventory/inventory-v2-client.tsx");
- assert.match(api,/unboundSlots/);assert.match(api,/NOT EXISTS\(SELECT 1 FROM printer_feed_positions/);
+ assert.match(api,/unboundSlots/);assert.match(api,/NOT EXISTS\(SELECT 1 FROM spool_bindings/);assert.match(api,/f\.feed_kind feedKind,f\.toolhead/);
  assert.match(page,/不会自动选择库存卷或扣减/);assert.match(page,/未绑定实体卷/);
  assert.doesNotMatch(api,/UPDATE material_spools[\s\S]{0,250}bambu_ams_slots/);
 });

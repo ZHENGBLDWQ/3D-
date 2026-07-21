@@ -28,6 +28,7 @@ export async function POST(request:Request){
   if(body.type==="events"){
     const bindings=await db.select().from(printerBindings).where(eq(printerBindings.gatewayId,gateway.id));
     const byId=new Map(bindings.map(item=>[item.id,item]));
+    const acceptedEventIds:string[]=[];
     for(const event of body.events||[]){
       if(!PRINTER_EVENT_TYPES.includes(event.type))continue;
       const bindingId="bindingId" in event.data?Number(event.data.bindingId):0,binding=byId.get(bindingId);if(!binding)continue;
@@ -35,6 +36,7 @@ export async function POST(request:Request){
       try{[saved]=await db.insert(printerEvents).values({bindingId,printerId:binding.printerId,eventId:String(event.id).slice(0,160),eventType:event.type,payload:JSON.stringify(publicData(event.data)),occurredAt:event.occurredAt}).returning({id:printerEvents.id})}
       catch{isNew=false;[saved]=await db.select({id:printerEvents.id}).from(printerEvents).where(and(eq(printerEvents.eventId,event.id),eq(printerEvents.bindingId,bindingId))).limit(1)}
       if(!saved)continue;
+      acceptedEventIds.push(event.id);
       if(isNew)await projectMonitorEvent(event,binding);
       await db.update(printerBindings).set({status:"online",lastSeenAt:now,updatedAt:now}).where(eq(printerBindings.id,bindingId));
       if(event.type==="printer.snapshot"){
@@ -44,7 +46,7 @@ export async function POST(request:Request){
       }
       if(event.type==="printer.materials")for(const slot of event.data.slots){const [old]=await db.select().from(bambuAmsSlots).where(and(eq(bambuAmsSlots.printerId,binding.printerId),eq(bambuAmsSlots.amsUnit,slot.unit),eq(bambuAmsSlots.trayIndex,slot.slot))).limit(1);const values={printerId:binding.printerId,amsUnit:slot.unit,trayIndex:slot.slot,material:slot.material||"",colorHex:slot.colorHex||"",remainingPercent:slot.remainingPercent,tagUid:slot.tagUid||"",active:slot.active,lastSeenAt:event.occurredAt};if(old)await db.update(bambuAmsSlots).set(values).where(eq(bambuAmsSlots.id,old.id));else await db.insert(bambuAmsSlots).values(values)}
     }
-    return Response.json({ok:true,acceptedEventIds:(body.events||[]).map(event=>event.id)});
+    return Response.json({ok:true,acceptedEventIds});
   }
   // Compatibility only: old gateways may replay receipts, but this monitor path never returns commands.
   if(body.type==="receipts"){

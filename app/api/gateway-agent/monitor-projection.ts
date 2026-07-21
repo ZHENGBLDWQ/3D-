@@ -11,13 +11,13 @@ export async function projectMonitorEvent(event: PrinterEvent, binding: Binding)
     const terminal = ["completed", "failed", "cancelled"].includes(status);
     await d1.prepare(`INSERT INTO print_sessions(organization_id,printer_id,source,external_session_key,filename,status,started_at,completed_at,last_observed_at,telemetry_snapshot)
       VALUES(?,?,?,?,?,?,?,?,?,?)
-      ON CONFLICT(organization_id,external_session_key) DO UPDATE SET filename=excluded.filename,status=excluded.status,completed_at=COALESCE(excluded.completed_at,print_sessions.completed_at),last_observed_at=excluded.last_observed_at,telemetry_snapshot=excluded.telemetry_snapshot,updated_at=CURRENT_TIMESTAMP`)
+      ON CONFLICT(organization_id,external_session_key) DO UPDATE SET filename=excluded.filename,status=CASE WHEN excluded.last_observed_at>=print_sessions.last_observed_at THEN excluded.status ELSE print_sessions.status END,completed_at=CASE WHEN excluded.last_observed_at>=print_sessions.last_observed_at THEN COALESCE(excluded.completed_at,print_sessions.completed_at) ELSE print_sessions.completed_at END,last_observed_at=MAX(excluded.last_observed_at,print_sessions.last_observed_at),telemetry_snapshot=CASE WHEN excluded.last_observed_at>=print_sessions.last_observed_at THEN excluded.telemetry_snapshot ELSE print_sessions.telemetry_snapshot END,updated_at=CURRENT_TIMESTAMP`)
       .bind(binding.organizationId,binding.printerId,data.source,data.externalSessionKey,data.currentFile||"",status,data.phase==="started"?event.occurredAt:null,terminal?event.occurredAt:null,event.occurredAt,JSON.stringify(data)).run();
     return;
   }
   if (event.type === "printer.snapshot" && event.data.sessionKey) {
-    await d1.prepare("UPDATE print_sessions SET last_observed_at=?,telemetry_snapshot=?,updated_at=CURRENT_TIMESTAMP WHERE organization_id=? AND external_session_key=?")
-      .bind(event.occurredAt,JSON.stringify(event.data),binding.organizationId,event.data.sessionKey).run();
+    await d1.prepare("UPDATE print_sessions SET last_observed_at=?,telemetry_snapshot=?,status=CASE WHEN ? IN ('printing','paused') THEN ? ELSE status END,updated_at=CURRENT_TIMESTAMP WHERE organization_id=? AND external_session_key=? AND last_observed_at<=?")
+      .bind(event.occurredAt,JSON.stringify(event.data),event.data.status,event.data.status,binding.organizationId,event.data.sessionKey,event.occurredAt).run();
     return;
   }
   if (event.type !== "printer.materials") return;

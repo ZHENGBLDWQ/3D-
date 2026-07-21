@@ -48,10 +48,10 @@ export async function GET(){
       ps.filename,ps.status sessionStatus,p.name printerName,s.spool_code spoolCode
       FROM print_material_usage_lines u JOIN print_sessions ps ON ps.id=u.print_session_id AND ps.organization_id=u.organization_id JOIN printers p ON p.id=ps.printer_id
       LEFT JOIN material_spools s ON s.id=u.spool_id AND s.organization_id=u.organization_id WHERE u.organization_id=? ORDER BY ps.last_observed_at DESC,u.id DESC LIMIT 100`).bind(org).all(),
-    db.prepare(`SELECT a.id,a.printer_id printerId,p.name printerName,a.ams_unit amsUnit,a.tray_index slotIndex,a.material,a.color_hex colorHex,a.remaining_percent remainingPercent,a.active,a.last_seen_at lastSeenAt
-      FROM bambu_ams_slots a JOIN printers p ON p.id=a.printer_id JOIN printer_bindings pb ON pb.printer_id=p.id AND pb.organization_id=?
-      WHERE NOT EXISTS(SELECT 1 FROM printer_feed_positions f JOIN spool_bindings b ON b.feed_position_id=f.id AND b.status='active' WHERE f.organization_id=? AND f.printer_id=a.printer_id AND f.ams_unit=a.ams_unit AND f.slot_index=a.tray_index)
-      GROUP BY a.id ORDER BY p.name,a.ams_unit,a.tray_index`).bind(org,org).all(),
+    db.prepare(`SELECT f.id,f.printer_id printerId,p.name printerName,f.ams_unit amsUnit,f.slot_index slotIndex,f.feed_kind feedKind,f.toolhead,'' material,'' colorHex,NULL remainingPercent,0 active,f.updated_at lastSeenAt
+      FROM printer_feed_positions f JOIN printers p ON p.id=f.printer_id
+      WHERE f.organization_id=? AND f.active=1 AND NOT EXISTS(SELECT 1 FROM spool_bindings b WHERE b.organization_id=f.organization_id AND b.feed_position_id=f.id AND b.status='active')
+      ORDER BY p.name,f.toolhead,f.ams_unit,f.slot_index`).bind(org).all(),
     db.prepare(`SELECT po.id,po.purchase_no purchaseNo,po.status,s.name supplierName,COALESCE(SUM(i.ordered_grams-i.received_grams),0) incomingGrams
       FROM purchase_orders po JOIN suppliers s ON s.id=po.supplier_id AND s.organization_id=po.organization_id JOIN purchase_order_items i ON i.purchase_order_id=po.id AND i.organization_id=po.organization_id
       WHERE po.organization_id=? AND po.status IN ('ordered','partially_received') GROUP BY po.id ORDER BY po.created_at DESC`).bind(org).all(),

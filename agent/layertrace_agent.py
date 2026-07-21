@@ -16,6 +16,7 @@ import urllib.request
 import uuid
 
 from layertrace_gateway.discovery import BambuDiscovery
+from layertrace_gateway.monitor import BambuMonitorAdapter, DurableEventOutbox
 
 CLOUD_URL = os.environ.get("LAYERTRACE_URL", "https://layertrace-3d-print-ops.dongwanqing0.chatgpt.site").rstrip("/")
 TOKEN = os.environ.get("LAYERTRACE_TOKEN", "").strip()
@@ -29,6 +30,10 @@ STATE_FILE = Path(os.environ.get("LAYERTRACE_STATE_FILE", Path(__file__).with_na
 BAMBU_HOST = os.environ.get("BAMBU_HOST", "")
 BAMBU_SERIAL = os.environ.get("BAMBU_SERIAL", "")
 BAMBU_ACCESS_CODE = os.environ.get("BAMBU_ACCESS_CODE", "")
+GATEWAY_TOKEN = os.environ.get("LAYERTRACE_GATEWAY_TOKEN", "").strip()
+BINDING_ID = int(os.environ.get("LAYERTRACE_BINDING_ID", "0") or 0)
+MONITOR_OUTBOX = Path(os.environ.get("LAYERTRACE_MONITOR_OUTBOX", STATE_FILE.with_name("monitor-outbox.json")))
+MONITOR_STATE = Path(os.environ.get("LAYERTRACE_MONITOR_STATE", STATE_FILE.with_name("monitor-state.json")))
 
 def discover_bambu(timeout=4):
     # Compatibility adapter: existing single-printer startup now shares the
@@ -270,7 +275,14 @@ def track_spool_usage(payload, spool_id):
 def report(payload):
     return request_json(f"{CLOUD_URL}/api/agent", "POST", payload, {"Authorization": f"Bearer {TOKEN}"})
 
+def report_monitor_events(outbox):
+    events = outbox.load()
+    if not events or not GATEWAY_TOKEN: return
+    result = request_json(f"{CLOUD_URL}/api/gateway-agent", "POST", {"type":"events","events":events}, {"Authorization":f"Bearer {GATEWAY_TOKEN}"})
+    outbox.acknowledge(set(result.get("acceptedEventIds") or []))
+
 def execute_command(command, bambu=None):
+    raise RuntimeError("monitor_only: use Bambu Studio or the printer for all controls")
     name = command["name"]
     if name == "start":
         payload = command.get("payload", {})
@@ -307,10 +319,13 @@ def main():
         print("等待配置：请在 local-hub/.env 中填写 " + "、".join(missing))
         while True:
             time.sleep(3600)
-    bambu = None
+    bambu, monitor, outbox = None, None, None
     if CONNECTOR == "bambu_lan":
         bambu = BambuMqtt(BAMBU_HOST, BAMBU_SERIAL, BAMBU_ACCESS_CODE)
         bambu.connect()
+        if GATEWAY_TOKEN and BINDING_ID:
+            outbox = DurableEventOutbox(MONITOR_OUTBOX)
+            monitor = BambuMonitorAdapter(BINDING_ID, BAMBU_SERIAL, outbox.append, state_path=MONITOR_STATE)
         print(f"Bambu LAN connected: {BAMBU_HOST} / {BAMBU_SERIAL}")
     last_spool_sync = 0
     while True:
@@ -319,6 +334,9 @@ def main():
             if CONNECTOR == "bambu_lan":
                 usage = bambu_usage_event(payload)
                 if usage: payload["usage"] = usage
+                if monitor and outbox:
+                    monitor.observe({"print":dict(bambu.last)})
+                    report_monitor_events(outbox)
             if SPOOLMAN_URL and time.time() - last_spool_sync >= SPOOLMAN_INTERVAL:
                 try:
                     payload["spools"] = spoolman_spools()

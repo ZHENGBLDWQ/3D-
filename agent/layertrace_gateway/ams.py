@@ -8,7 +8,7 @@ def _color(value: object) -> str | None:
 def normalize_ams(report: dict) -> list[dict]:
     print_data = report.get("print", report)
     units = print_data.get("ams", {}).get("ams", []) or []
-    active_tray = str(print_data.get("ams", {}).get("tray_now", ""))
+    active_tray = str(print_data.get("tray_now", print_data.get("ams", {}).get("tray_now", "")))
     slots, seen = [], set()
     for unit in units:
         unit_id = int(unit.get("id", 0) or 0)
