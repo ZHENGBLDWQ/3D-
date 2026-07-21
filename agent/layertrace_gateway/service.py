@@ -72,6 +72,7 @@ class LocalHubService:
         self.connection_factory, self.discovery, self.worker_factory, self.clock = connection_factory, discovery or BambuDiscovery(), worker_factory, clock
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.outbox = DurableEventOutbox(self.state_dir / "events.json")
+        self.status_path = self.state_dir / "status.json"
         self.workers, self.devices = {}, {}
 
     def cycle(self):
@@ -102,7 +103,14 @@ class LocalHubService:
             self.outbox.acknowledge(set(result.get("acceptedEventIds") or []))
         pending = sum(1 for binding in bindings if not self.credentials.has_access_code(str(binding.get("deviceId") or "")))
         self.cloud.post("heartbeat", heartbeat={"status":"online" if not pending else "degraded","version":self.version,"diagnostics":{"mode":"monitor_only","discoveredDevices":len(self.devices),"configuredDevices":len(active),"connectedDevices":sum(worker.connected for worker in self.workers.values()),"pendingCredentials":pending}})
-        return {"discovered":len(self.devices),"configured":len(active),"connected":sum(worker.connected for worker in self.workers.values()),"pendingCredentials":pending}
+        status = {"version":self.version,"mode":"monitor_only","lastCycleAt":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime(self.clock())),"discovered":len(self.devices),"configured":len(active),"connected":sum(worker.connected for worker in self.workers.values()),"pendingCredentials":pending,"queuedEvents":len(self.outbox.load()),"lastErrorType":None}
+        self._write_status(status)
+        return {key:status[key] for key in ("discovered","configured","connected","pendingCredentials")}
+
+    def _write_status(self, status):
+        temporary = self.status_path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(status, ensure_ascii=False), encoding="utf-8")
+        os.replace(temporary, self.status_path)
 
     def close(self):
         for worker in self.workers.values(): worker.stop()
@@ -127,6 +135,8 @@ def run():
         while True:
             try:
                 status = service.cycle(); print(time.strftime("%F %T"), json.dumps(status, ensure_ascii=False), flush=True)
-            except (OSError, ValueError, json.JSONDecodeError) as error: print(time.strftime("%F %T"), f"sync failed: {error}", flush=True)
+            except (OSError, ValueError, json.JSONDecodeError) as error:
+                service._write_status({"version":service.version,"mode":"monitor_only","lastCycleAt":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime()),"lastErrorType":type(error).__name__,"queuedEvents":len(service.outbox.load())})
+                print(time.strftime("%F %T"), f"sync failed: {type(error).__name__}", flush=True)
             time.sleep(15)
     finally: service.close()

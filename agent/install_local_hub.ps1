@@ -16,7 +16,8 @@ foreach ($candidate in $pythonCandidates) {
 if (-not $pythonExe) { throw "Python 3.10 or newer was not found. Install Python, then run this installer again." }
 
 New-Item -ItemType Directory -Path $appRoot -Force | Out-Null
-foreach ($file in "layertrace_agent.py","configure_local_hub.py","run_local_hub.py") { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination $appRoot -Force }
+foreach ($file in "layertrace_agent.py","configure_local_hub.py","run_local_hub.py","manage_local_hub.py") { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination $appRoot -Force }
+foreach ($file in "manage_local_hub.ps1","uninstall_local_hub.ps1") { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination $installRoot -Force }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "layertrace_gateway") -Destination $appRoot -Recurse -Force
 
 $gatewayToken = ""

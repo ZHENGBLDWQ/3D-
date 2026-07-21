@@ -37,3 +37,16 @@ The previous `x2d` scripts remain for compatibility. New A1, X2D and P2S install
 ```
 
 The installer copies the standard-library-only Python service to the current user's Local AppData, discovers Bambu printers, stores the gateway token and selected printer access codes with Windows DPAPI, and registers a limited-permission scheduled task. The service refreshes DHCP addresses, pulls organization-scoped binding requests, maintains one read-only MQTT monitor per printer, persists events before upload, and reports diagnostics. It never exposes a printer-control command surface.
+
+Day-to-day operations use `manage_local_hub.ps1`. Examples:
+
+```powershell
+.\agent\manage_local_hub.ps1 -Action status
+.\agent\manage_local_hub.ps1 -Action scan
+.\agent\manage_local_hub.ps1 -Action set-credential -Serial "PRINTER_SERIAL"
+.\agent\manage_local_hub.ps1 -Action test -Serial "PRINTER_SERIAL"
+.\agent\manage_local_hub.ps1 -Action diagnostics
+.\agent\manage_local_hub.ps1 -Action restart
+```
+
+Diagnostics contain only masked device identifiers and credential-presence flags. Uninstall keeps encrypted credentials by default for recovery; use `uninstall_local_hub.ps1 -RemoveCredentials` only when permanent credential removal is intended.

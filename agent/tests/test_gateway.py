@@ -6,6 +6,7 @@ from layertrace_gateway.mqtt import MultiPrinterMqttManager
 from layertrace_gateway.ams import normalize_ams
 from layertrace_gateway.monitor import BambuMonitorAdapter, DurableEventOutbox
 from layertrace_gateway.service import LocalHubService
+from manage_local_hub import diagnostic_report, mask, safe_url, test_connection
 import tempfile
 import threading
 
@@ -15,6 +16,7 @@ class MemoryCredentials(CredentialStore):
     def get_access_code(self, device_id): return self.values.get(device_id)
     def delete_access_code(self, device_id): return self.values.pop(device_id, None) is not None
     def has_access_code(self, device_id): return device_id in self.values
+    def configured_device_ids(self): return sorted(key for key in self.values if key.startswith("bambu:"))
 
 class FakeConnection:
     def __init__(self): self.closed = False
@@ -159,5 +161,29 @@ class GatewayTests(unittest.TestCase):
             status = service.cycle()
             self.assertEqual(status["pendingCredentials"], 1)
             self.assertEqual(service.workers, {})
+
+    def test_diagnostics_are_useful_but_never_contain_credentials(self):
+        credentials = MemoryCredentials(); credentials.set_access_code("gateway:token","ltgw_top_secret"); credentials.set_access_code("bambu:SERIAL123","lan_secret")
+        with tempfile.TemporaryDirectory() as folder:
+            from pathlib import Path
+            root = Path(folder); (root / "config.json").write_text('{"url":"https://user:password@example.com/path?token=nope"}',encoding="utf-8")
+            (root / "state").mkdir(); (root / "state" / "status.json").write_text('{"connected":1}',encoding="utf-8")
+            report = diagnostic_report(root, credentials, task_state="Running", now=lambda:100)
+            rendered = repr(report)
+            self.assertEqual(report["cloudOrigin"], "https://example.com")
+            self.assertEqual(report["configuredDevices"], ["…IAL123"])
+            self.assertNotIn("ltgw_top_secret", rendered); self.assertNotIn("lan_secret", rendered); self.assertNotIn("password", rendered)
+
+    def test_connection_check_returns_sanitized_result(self):
+        credentials = MemoryCredentials(); printer = DiscoveredPrinter("bambu:SERIAL123","SERIAL123","10.0.0.2","A1","A1")
+        self.assertEqual(test_connection(printer, credentials, FakeConnection)["error"], "credential_missing")
+        credentials.set_access_code(printer.device_id,"private")
+        class Probe:
+            def __init__(self,*_): self.sock=None
+            def connect(self): pass
+            def poll(self): return {"gcode_state":"IDLE","access_code":"must_not_escape"}
+        result = test_connection(printer, credentials, Probe)
+        self.assertEqual(result, {"ok":True,"device":"…IAL123","model":"A1","host":"10.0.0.2","state":"idle"})
+        self.assertEqual(mask("SERIAL123"), "…IAL123"); self.assertEqual(safe_url("invalid"), "invalid")
 
 if __name__ == "__main__": unittest.main()

@@ -58,3 +58,7 @@ class LocalCredentialStore(CredentialStore):
     def has_access_code(self, device_id):
         """Checks presence without decrypting or exposing the secret."""
         return device_id in self._read()
+
+    def configured_device_ids(self):
+        """Returns identifiers only; encrypted values never leave the store."""
+        return sorted(key for key in self._read() if key.startswith("bambu:"))
