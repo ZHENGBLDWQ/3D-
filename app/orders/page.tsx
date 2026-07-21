@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 const flows = [
   { href: "/quotes", eyebrow: "QUOTATION", title: "客户与报价", copy: "维护客户、成本报价与有效期；报价接受后自动转为订单。", action: "进入报价" },
-  { href: "/", eyebrow: "ORDER REGISTER", title: "订单与生产进度", copy: "查看订单、交期、关联产品，以及由打印监控数据回写的完成进度。", action: "返回工作台查看订单" },
+  { href: "/", eyebrow: "ORDER REGISTER", title: "订单与生产进度", copy: "查看订单、交期、关联产品，以及打印监控数据回写的完成进度。", action: "返回工作台查看订单" },
   { href: "/fulfillment", eyebrow: "FULFILLMENT", title: "质检与成品交付", copy: "按订单登记良品、包装与交付，避免把打印完成误认为成品完成。", action: "进入交付" },
   { href: "/receivables", eyebrow: "RECEIVABLES", title: "应收与回款", copy: "从订单生成发票，跟踪分次回款、逾期信号和账龄。", action: "进入应收" },
   { href: "/after-sales", eyebrow: "AFTER SALES", title: "售后与返工", copy: "把客户问题、返工任务和退款成本继续归集到原订单。", action: "进入售后" },

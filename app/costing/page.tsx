@@ -17,5 +17,5 @@ export default async function CostingHubPage(){
     <section className={styles.formula}><span>主体耗材</span><b>＋</b><span>支撑与辅助材料</span><b>＋</b><span>冲刷与报废</span><b>＋</b><span>设备、电费与人工</span><b>＝</b><strong>真实生产成本</strong></section>
     <section className={styles.notice}><b>当前口径</b><p>现有页面继续使用当前 API；后续分类切片数据接入后，再细分主体、支撑、支撑界面、冲刷、擦拭塔和校准成本。</p></section>
     <section className={styles.grid}>{cards.map(card=><a href={card.href} key={card.code}><i>{card.code}</i><h2>{card.title}</h2><p>{card.copy}</p><span>查看现有数据 →</span></a>)}</section>
-  </main>
+  </main>;
 }
