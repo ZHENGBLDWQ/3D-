@@ -519,7 +519,7 @@ function Dashboard({
     ...((systemHealth?.pendingCommands||systemHealth?.failedCommands)?[{tone:"warning",title:"设备命令需要处理",detail:`超时 ${systemHealth?.pendingCommands||0} · 失败 ${systemHealth?.failedCommands||0}`,section:"系统中心" as Section}]:[]),
     ...(varianceAlerts.length?[{tone:"danger",title:`${varianceAlerts.length} 张耗材称重差异单待处理`,detail:"库存尚未调整，请核查实际原因",href:"/material-variances"}]:[]),
     ...(settlementAlerts.length?[{tone:"warning",title:`${settlementAlerts.length} 个打印会话尚未完成耗材结算`,detail:"补齐实体卷、分类、层数或称重证据",href:"/settlements"}]:[]),
-    ...(feedAlerts.length?[{tone:"danger",title:`${feedAlerts.length} 个供料位置未绑定实体卷`,detail:"绑定前不会自动扣减实际库存",href:"/inventory"}]:[]),
+    ...(feedAlerts.length?[{tone:"danger",title:`${feedAlerts.length} 个供料位置未绑定实体卷`,detail:"绑定前不会自动扣减实际库存",href:"/feed-bindings"}]:[]),
     ...(calibrationAlerts.length?[{tone:"info",title:`${calibrationAlerts.length} 组校准样本仍不足`,detail:"完成至少 3 个有效称重样本",href:"/calibration"}]:[]),
     ...(!data.printers.length?[{tone:"info",title:"还没有添加打印机",detail:"建立第一台设备档案后即可安排任务",section:"设备管理" as Section}]:[]),
   ];
