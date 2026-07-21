@@ -40,7 +40,13 @@ export interface PrinterSnapshot {
   remainingSeconds?: number;
   currentFile?: string;
   nozzleTemperatureC?: number;
+  nozzleTargetTemperatureC?: number;
   bedTemperatureC?: number;
+  bedTargetTemperatureC?: number;
+  currentLayer?: number;
+  totalLayers?: number;
+  taskId?: string;
+  sessionKey?: string;
   errorCode?: string;
   observedAt: string;
 }

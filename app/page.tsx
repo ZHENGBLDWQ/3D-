@@ -171,11 +171,17 @@ type WorkspaceData = {
   itemCosts: ItemCost[];
 };
 
-const navGroups: { title: string; items: { label: Section; mark: string }[] }[] = [
-  { title: "工作台", items: [{ label: "概览", mark: "⌂" }, { label: "经营分析", mark: "▥" }, { label: "良率分析", mark: "◎" }] },
-  { title: "业务与生产", items: [{ label: "订单", mark: "▤" }, { label: "打印物品", mark: "◇" }, { label: "打印队列", mark: "▷" }, { label: "生产明细", mark: "≋" }, { label: "外部任务", mark: "↗" }] },
-  { title: "库存与设备", items: [{ label: "耗材库存", mark: "◉" }, { label: "耗材卷同步", mark: "◍" }, { label: "文件资产", mark: "▱" }, { label: "设备管理", mark: "▣" }] },
-];
+// PRIMARY_NAV_START — keep the monitoring ERP surface intentionally small.
+const primaryNavigation = [
+  { label: "首页", mark: "⌂", href: null },
+  { label: "订单中心", mark: "▤", href: "/orders" },
+  { label: "实时打印监控", mark: "◉", href: "/monitor" },
+  { label: "耗材库存", mark: "◍", href: "/inventory" },
+  { label: "成本与定价", mark: "RM", href: "/costing" },
+  { label: "经营分析", mark: "▥", href: "/analytics" },
+  { label: "系统设置", mark: "⚙", href: "/settings" },
+] as const;
+// PRIMARY_NAV_END
 const sectionDescriptions: Record<Section,string> = {
   概览:"掌握订单、设备、库存和生产风险",经营分析:"查看收入、成本与订单利润",良率分析:"定位失败原因与质量趋势",
   打印物品:"维护产品档案、工艺与标准成本",耗材库存:"管理仓库、在途、盘点与在机耗材",耗材卷同步:"同步并挂载 Spoolman 耗材卷",
@@ -348,35 +354,17 @@ function HomeWorkspace() {
           </div>
         </div>
         <nav>
-          {navGroups.map(group => <div className="nav-group" key={group.title}>
-            <p className="nav-title">{group.title}</p>
-            {group.items.map(item => <button key={item.label} className={section===item.label?"nav-active":""} aria-current={section===item.label?"page":undefined} title={item.label} onClick={()=>setSection(item.label)}>
-              <span>{item.mark}</span><em>{item.label}</em>{item.label==="打印队列"&&waiting>0&&<b>{waiting}</b>}
-            </button>)}
-          </div>)}
           <div className="nav-group">
-            <p className="nav-title">管理</p>
-            <a className="main-nav-link" href="/team" title="员工与权限"><span>♙</span><em>员工与权限</em></a>
-            <a className="main-nav-link" href="/fleet" title="打印机中枢"><span>▣</span><em>打印机中枢</em></a>
-            <a className="main-nav-link" href="/models" title="模型资产库"><span>⬡</span><em>模型资产库</em></a>
-            <a className="main-nav-link" href="/gateways" title="通信网关"><span>⌁</span><em>通信网关</em></a>
-            <a className="main-nav-link" href="/slicing" title="切片中心"><span>◫</span><em>切片中心</em></a>
-            <a className="main-nav-link" href="/preflight" title="下发预检"><span>✓</span><em>下发预检</em></a>
-            <a className="main-nav-link" href="/scheduling" title="智能排产"><span>⌘</span><em>智能排产</em></a>
-            <a className="main-nav-link" href="/dispatch" title="下发工作流"><span>⇢</span><em>下发工作流</em></a>
-            <a className="main-nav-link" href="/execution" title="生产执行"><span>▶</span><em>生产执行</em></a>
-            <a className="main-nav-link" href="/quality" title="质量追溯"><span>◎</span><em>质量追溯</em></a>
-            <a className="main-nav-link" href="/profit" title="利润分析"><span>RM</span><em>利润分析</em></a>
-            <a className="main-nav-link" href="/maintenance" title="设备维护"><span>⚒</span><em>设备维护</em></a>
-            <a className="main-nav-link" href="/alerts" title="告警中心"><span>!</span><em>告警中心</em></a>
-            <a className="main-nav-link" href="/reports" title="经营报表"><span>≡</span><em>经营报表</em></a>
-            <a className="main-nav-link" href="/procurement" title="采购补货"><span>↓</span><em>采购补货</em></a>
-            <a className="main-nav-link" href="/quotes" title="客户报价"><span>¥</span><em>客户报价</em></a>
-            <a className="main-nav-link" href="/recovery" title="备份恢复"><span>↻</span><em>备份恢复</em></a>
-            <a className="main-nav-link" href="/fulfillment" title="成品交付"><span>▣</span><em>成品交付</em></a>
-            <a className="main-nav-link" href="/receivables" title="应收回款"><span>RM</span><em>应收回款</em></a>
-            <a className="main-nav-link" href="/after-sales" title="售后返工"><span>⚑</span><em>售后返工</em></a>
-            <button className={section==="系统中心"?"nav-active":""} aria-current={section==="系统中心"?"page":undefined} title="系统中心" onClick={()=>setSection("系统中心")}><span>⚙</span><em>系统中心</em></button>
+            <p className="nav-title">经营管理</p>
+            {primaryNavigation.map(item => item.href ? (
+              <a className="main-nav-link" href={item.href} title={item.label} key={item.label}>
+                <span>{item.mark}</span><em>{item.label}</em>
+              </a>
+            ) : (
+              <button className="nav-active" aria-current="page" title={item.label} key={item.label} onClick={()=>setSection("概览")}>
+                <span>{item.mark}</span><em>{item.label}</em>
+              </button>
+            ))}
           </div>
         </nav>
         <div className="sidebar-bottom">
@@ -2148,6 +2136,8 @@ function FileAssets({
     } else toast("删除失败");
   }
   async function dispatch(file: PrintFile) {
+    toast("当前为只读监控模式，请在 Bambu Studio 中发送并打印");
+    return;
     if (!printers.length) {
       toast("请先在设备管理中添加并连接打印机");
       return;
@@ -2265,7 +2255,7 @@ function FileAssets({
               </div>
               <div className="file-actions">
                 {["G-code", "3MF"].includes(file.kind) && (
-                  <button onClick={() => dispatch(file)}>发送并打印</button>
+                  <span className="muted">请在 Bambu Studio 中发送打印</span>
                 )}
                 <a href={`/api/files?download=${file.id}`}>下载</a>
                 <button onClick={() => remove(file.id)}>删除</button>
@@ -2616,6 +2606,8 @@ function PrinterManager({ toast }: { toast: (m: string) => void }) {
     printer: Printer,
     name: "pause" | "resume" | "cancel",
   ) {
+    toast("当前为只读监控模式，请在 Bambu Studio 或打印机上操作");
+    return;
     const labels = { pause: "暂停", resume: "继续", cancel: "取消" };
     if (
       name === "cancel" &&
@@ -2804,14 +2796,7 @@ function PrinterManager({ toast }: { toast: (m: string) => void }) {
                 <button onClick={() => connect(p)}>连接代理</button>
                 {p.connectionState !== "未连接" && (
                   <>
-                    <button onClick={() => command(p, "pause")}>暂停</button>
-                    <button onClick={() => command(p, "resume")}>继续</button>
-                    <button
-                      className="danger-link"
-                      onClick={() => command(p, "cancel")}
-                    >
-                      取消打印
-                    </button>
+                    <span className="muted">设备操作请使用 Bambu Studio</span>
                   </>
                 )}
                 <button onClick={() => status(p, "维护中")}>维护</button>
