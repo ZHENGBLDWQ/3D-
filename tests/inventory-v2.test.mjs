@@ -40,6 +40,14 @@ test("legacy aggregate placeholders are isolated from sealed inventory and issue
  const page=await read("app/inventory/inventory-v2-client.tsx");
  assert.match(page,/const sealed=useMemo\(\(\)=>data\?\.spools\.filter\(s=>s\.state==="sealed"\)/);
  assert.match(page,/legacy=useMemo\(\(\)=>data\?\.spools\.filter\(s=>s\.state==="needs_count"\)/);
- assert.match(page,/完成实物盘点并登记实体卷前不可领用/);
+ assert.match(page,/逐卷称重并登记真实卷码后才可领用/);
  assert.match(page,/\[\.\.\.open,\.\.\.sealed\]\.map/);
+});
+
+test("legacy stock can only become an issueable spool through an audited physical count",async()=>{
+ const [api,page]=await Promise.all([read("app/api/inventory-v2/route.ts"),read("app/inventory/inventory-v2-client.tsx")]);
+ assert.match(api,/action==="confirmLegacySpool"/);assert.match(api,/spool\.state!=="needs_count"/);
+ assert.match(api,/inventory_v2\.legacy\.confirmed/);assert.match(api,/历史聚合库存实物盘点并转为实体卷/);
+ assert.match(api,/INSERT INTO spool_weight_checks/);assert.match(api,/physicalState/);
+ assert.match(page,/历史库存实物盘点/);assert.match(page,/盘点确认/);assert.match(page,/action:"confirmLegacySpool"/);
 });
