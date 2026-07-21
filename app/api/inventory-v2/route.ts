@@ -74,6 +74,19 @@ export async function POST(request:Request){
       await db.prepare("INSERT INTO material_spool_movements(organization_id,spool_id,movement_type,to_location_id,net_grams_delta,idempotency_key,operator_email,note) VALUES(?,?,'receipt',?,?,?,?,?)").bind(org,spool!.id,location.id,net,key,context.email,text(body.note,300)).run();
       await recordAudit(context,"inventory_v2.spool.received","material_spool",String(spool!.id),{spoolCode,net,lotNo});return Response.json({id:spool!.id},{status:201});
     }
+    if(action==="confirmLegacySpool"){
+      const spoolId=id(body.spoolId),spoolCode=text(body.spoolCode,80).toUpperCase(),physicalState=text(body.physicalState,30),net=grams(body.netGrams),tare=grams(body.tareGrams);
+      if(!spoolId||!spoolCode||!["sealed","open_storage"].includes(physicalState)||net<=0||tare<0)return fail("请填写实体卷码、盘点状态、实际净重和空盘重量");
+      const spool=await db.prepare("SELECT state,remaining_net_grams remaining,current_location_id locationId FROM material_spools WHERE id=? AND organization_id=?").bind(spoolId,org).first<{state:string;remaining:number;locationId:number}>();
+      if(!spool)return fail("历史库存不存在",404);if(spool.state!=="needs_count")return fail("该记录已经完成迁移，不能重复确认",409);
+      const variance=Math.round((net-spool.remaining)*1000)/1000,gross=Math.round((net+tare)*1000)/1000,key=`legacy-count:${crypto.randomUUID()}`;
+      await db.batch([
+        db.prepare("UPDATE material_spools SET spool_code=?,state=?,initial_net_grams=?,remaining_net_grams=?,tare_grams=?,last_gross_grams=?,last_weighed_at=?,opened_at=CASE WHEN ?='open_storage' THEN COALESCE(opened_at,?) ELSE opened_at END,updated_at=? WHERE id=? AND organization_id=? AND state='needs_count'").bind(spoolCode,physicalState,net,net,tare,gross,now,physicalState,now,now,spoolId,org),
+        db.prepare("INSERT INTO material_spool_movements(organization_id,spool_id,movement_type,from_location_id,to_location_id,net_grams_delta,idempotency_key,operator_email,note) VALUES(?,?,'adjust',?,?,?,?,?,?)").bind(org,spoolId,spool.locationId,spool.locationId,variance,key,context.email,"历史聚合库存实物盘点并转为实体卷"),
+        db.prepare("INSERT INTO spool_weight_checks(organization_id,spool_id,gross_grams,tare_grams,measured_net_grams,book_net_grams,variance_grams,measured_by,measured_at) VALUES(?,?,?,?,?,?,?,?,?)").bind(org,spoolId,gross,tare,net,spool.remaining,variance,context.email,now),
+      ]);
+      await recordAudit(context,"inventory_v2.legacy.confirmed","material_spool",String(spoolId),{spoolCode,physicalState,net,tare,variance});return Response.json({spoolId,spoolCode,physicalState,net,variance});
+    }
     if(action==="createFeed"){
       const printerId=id(body.printerId),feedKind=text(body.feedKind,20),toolhead=text(body.toolhead,20)||"main";if(!printerId||!["ams","ams_lite","ams_ht","external"].includes(feedKind)||!["main","auxiliary","left","right","unknown"].includes(toolhead))return fail("供料位置参数无效");
       const owned=await db.prepare("SELECT 1 FROM printer_bindings WHERE printer_id=? AND organization_id=? LIMIT 1").bind(printerId,org).first();if(!owned)return fail("打印机不属于当前组织",404);
