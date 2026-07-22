@@ -11,6 +11,7 @@ export default async function AnalyticsHubPage(){
   {href:"/reports",title:"生产经营报表",tag:"综合",copy:"订单收入、生产任务、良率、耗材成本和设备利用率的期间汇总。",allowed:true},
   {href:"/profit",title:"订单利润分析",tag:"财务",copy:"比较预计与实际成本，查看订单利润、利润率和材料偏差。",allowed:finance},
   {href:"/inventory-value",title:"库存价值与成本层",tag:"财务",copy:"按实体卷和采购批次查看未拆封、仓储及使用中耗材的真实库存价值与采购价差。",allowed:finance},
+  {href:"/replenishment-forecast",title:"补货预测与采购现金流",tag:"计划",copy:"结合实际消耗、库存、在途采购和供应商交期，预测最晚下单日期与采购资金需求。",allowed:finance},
   {href:"/quality",title:"质量与良率",tag:"质量",copy:"定位失败原因、返工趋势和产品质量风险。",allowed:true},
   {href:"/maintenance",title:"设备效率与维保",tag:"设备",copy:"结合累计工时、维保到期和最近生产记录评估设备状态。",allowed:true},
  ];
