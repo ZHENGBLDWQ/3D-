@@ -10,3 +10,4 @@ export function receiptStatus(items:Array<{orderedGrams:number;receivedGrams:num
 }
 export function suggestedReplenishment(remaining:number,lowStock:number,incoming=0){return Math.max(0,Math.ceil((Math.max(lowStock*3,1000)-remaining-incoming)/100)*100)}
 export function suggestedSpoolReplenishment(onHand:number,reorderPoint:number,targetStock:number,incoming=0){return onHand<=reorderPoint?Math.max(0,Math.ceil(targetStock-onHand-incoming)):0}
+export function supplierOfferCost(spools:number,unitCents:number,taxRateBps:number,freightCents:number){const subtotal=Math.max(0,Math.round(spools*unitCents)),tax=Math.max(0,Math.round(subtotal*taxRateBps/10000)),freight=Math.max(0,Math.round(freightCents)),total=subtotal+tax+freight;return {subtotalCents:subtotal,taxCents:tax,freightCents:freight,landedTotalCents:total,landedCentsPerSpool:spools>0?Math.ceil(total/spools):0}}
