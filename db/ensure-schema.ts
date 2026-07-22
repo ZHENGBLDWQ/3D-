@@ -50,6 +50,7 @@ import migration0047 from "../drizzle/0047_catalog_driven_procurement.sql?raw";
 import migration0048 from "../drizzle/0048_supplier_offers_cost_approval.sql?raw";
 import migration0049 from "../drizzle/0049_procurement_invoice_reconciliation.sql?raw";
 import migration0050 from "../drizzle/0050_replenishment_forecast_drafts.sql?raw";
+import migration0051 from "../drizzle/0051_procurement_budget_control.sql?raw";
 
 const baseMigrations = [
   migration0000,migration0001,migration0002,migration0003,migration0004,
@@ -57,7 +58,7 @@ const baseMigrations = [
   migration0010,migration0011,migration0012,migration0013,migration0014,
   migration0015,migration0016,migration0017,migration0018,migration0019,migration0020,migration0021,migration0022,migration0023,migration0024,migration0025,migration0026,migration0027,migration0028,migration0029,
 ].map((sql,id)=>({id,sql}));
-const migrations = [...baseMigrations,{id:30,sql:migration0030},{id:31,sql:migration0031},{id:32,sql:migration0032},{id:33,sql:migration0033},{id:34,sql:migration0034},{id:35,sql:migration0035},{id:36,sql:migration0036},{id:37,sql:migration0037},{id:38,sql:migration0038},{id:39,sql:migration0039},{id:40,sql:migration0040},{id:41,sql:migration0041},{id:42,sql:migration0042},{id:43,sql:migration0043},{id:44,sql:migration0044},{id:45,sql:migration0045},{id:46,sql:migration0046},{id:47,sql:migration0047},{id:48,sql:migration0048},{id:49,sql:migration0049},{id:50,sql:migration0050}];
+const migrations = [...baseMigrations,{id:30,sql:migration0030},{id:31,sql:migration0031},{id:32,sql:migration0032},{id:33,sql:migration0033},{id:34,sql:migration0034},{id:35,sql:migration0035},{id:36,sql:migration0036},{id:37,sql:migration0037},{id:38,sql:migration0038},{id:39,sql:migration0039},{id:40,sql:migration0040},{id:41,sql:migration0041},{id:42,sql:migration0042},{id:43,sql:migration0043},{id:44,sql:migration0044},{id:45,sql:migration0045},{id:46,sql:migration0046},{id:47,sql:migration0047},{id:48,sql:migration0048},{id:49,sql:migration0049},{id:50,sql:migration0050},{id:51,sql:migration0051}];
 
 let schemaPromise: Promise<void> | null = null;
 
