@@ -3,6 +3,7 @@ import {requireApiAccess} from "../../api-auth";
 import {getD1} from "../../../db";
 import {canTransitionPurchase,canTransitionRequest,receiptStatus,suggestedSpoolReplenishment,supplierInvoiceVariance,supplierOfferCost,type PurchaseStatus,type RequestStatus} from "../../../procurement/workflow";
 import {getReplenishmentForecast} from "../../../replenishment/data";
+import {getSupplierPerformance} from "../../../supplier-performance/data";
 
 const fail=(error:string,status=400)=>Response.json({error},{status});
 const value=(input:unknown,max=200)=>String(input??"").trim().slice(0,max);
@@ -17,7 +18,7 @@ export async function GET(){
   const denied=await requireApiAccess();if(denied)return denied;
   const context=await getAccessContext();if(!context)return fail("请先登录",401);
   const db=getD1();
-  const [suppliers,materials,requests,orders,orderItems,receipts,offers,invoices]=await Promise.all([
+  const [suppliers,materials,requests,orders,orderItems,receipts,offers,invoices,performance]=await Promise.all([
     db.prepare("SELECT id,code,name,contact,phone,email,status FROM suppliers WHERE organization_id=? ORDER BY name").bind(context.organizationId).all(),
     db.prepare(`SELECT c.id,c.catalog_code catalogCode,c.material,c.color_name color,c.color_hex colorHex,c.brand,c.default_net_grams defaultNetGrams,c.default_tare_grams defaultTareGrams,c.reorder_point_spools reorderPointSpools,c.target_stock_spools targetStockSpools,
       COALESCE((SELECT COUNT(*) FROM material_spools ms WHERE ms.organization_id=c.organization_id AND ms.catalog_item_id=c.id AND ms.state IN ('sealed','open_storage')),0) onHandSpools,
@@ -36,9 +37,10 @@ export async function GET(){
     db.prepare("SELECT gr.*,po.purchase_no purchaseNo,COALESCE((SELECT SUM(gri.spool_count) FROM goods_receipt_items gri WHERE gri.receipt_id=gr.id AND gri.organization_id=gr.organization_id),0) spoolCount FROM goods_receipts gr JOIN purchase_orders po ON po.id=gr.purchase_order_id AND po.organization_id=gr.organization_id WHERE gr.organization_id=? ORDER BY gr.id DESC LIMIT 100").bind(context.organizationId).all(),
     db.prepare(`SELECT o.id,o.supplier_id supplierId,o.catalog_item_id catalogItemId,o.currency,o.unit_price_cents_per_spool unitPriceCentsPerSpool,o.tax_rate_bps taxRateBps,o.freight_cents_per_order freightCentsPerOrder,o.min_order_spools minOrderSpools,o.lead_time_days leadTimeDays,o.valid_from validFrom,o.valid_until validUntil,o.status,o.notes,s.name supplierName,c.catalog_code catalogCode,c.material,c.color_name colorName FROM supplier_material_offers o JOIN suppliers s ON s.id=o.supplier_id AND s.organization_id=o.organization_id JOIN material_catalog_items c ON c.id=o.catalog_item_id AND c.organization_id=o.organization_id WHERE o.organization_id=? ORDER BY o.status,o.catalog_item_id,o.unit_price_cents_per_spool`).bind(context.organizationId).all(),
     db.prepare("SELECT id,purchase_order_id purchaseOrderId,invoice_no invoiceNo,invoice_date invoiceDate,status,actual_subtotal_cents actualSubtotalCents,actual_tax_cents actualTaxCents,actual_freight_cents actualFreightCents,actual_total_cents actualTotalCents,approved_total_cents approvedTotalCents,variance_cents varianceCents,notes,review_note reviewNote FROM supplier_invoices WHERE organization_id=? ORDER BY id DESC").bind(context.organizationId).all(),
+    getSupplierPerformance(context.organizationId),
   ]);
   const materialRows=(materials.results??[]).map(row=>({...row,suggestedSpools:suggestedSpoolReplenishment(Number(row.onHandSpools),Number(row.reorderPointSpools),Number(row.targetStockSpools),Number(row.incomingSpools))}));
-  return Response.json({canManage:managers.has(context.role),canReceive:can(context,"inventory.write"),suppliers:suppliers.results??[],materials:materialRows,requests:requests.results??[],orders:orders.results??[],orderItems:orderItems.results??[],receipts:receipts.results??[],offers:offers.results??[],invoices:invoices.results??[]});
+  return Response.json({canManage:managers.has(context.role),canReceive:can(context,"inventory.write"),suppliers:suppliers.results??[],materials:materialRows,requests:requests.results??[],orders:orders.results??[],orderItems:orderItems.results??[],receipts:receipts.results??[],offers:offers.results??[],invoices:invoices.results??[],supplierScores:performance.suppliers.map(row=>({supplierId:row.supplierId,score:row.score,sampleConfidence:row.sampleConfidence,deliveryRate:row.deliveryRate}))});
 }
 
 export async function POST(request:Request){
