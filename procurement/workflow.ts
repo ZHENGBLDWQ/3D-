@@ -9,3 +9,4 @@ export function receiptStatus(items:Array<{orderedGrams:number;receivedGrams:num
   return complete?"completed":"partially_received";
 }
 export function suggestedReplenishment(remaining:number,lowStock:number,incoming=0){return Math.max(0,Math.ceil((Math.max(lowStock*3,1000)-remaining-incoming)/100)*100)}
+export function suggestedSpoolReplenishment(onHand:number,reorderPoint:number,targetStock:number,incoming=0){return onHand<=reorderPoint?Math.max(0,Math.ceil(targetStock-onHand-incoming)):0}
