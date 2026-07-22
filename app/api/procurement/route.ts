@@ -2,6 +2,7 @@ import {can,getAccessContext,recordAudit} from "../../access-control";
 import {requireApiAccess} from "../../api-auth";
 import {getD1} from "../../../db";
 import {canTransitionPurchase,canTransitionRequest,receiptStatus,suggestedSpoolReplenishment,supplierInvoiceVariance,supplierOfferCost,type PurchaseStatus,type RequestStatus} from "../../../procurement/workflow";
+import {getReplenishmentForecast} from "../../../replenishment/data";
 
 const fail=(error:string,status=400)=>Response.json({error},{status});
 const value=(input:unknown,max=200)=>String(input??"").trim().slice(0,max);
@@ -45,6 +46,16 @@ export async function POST(request:Request){
   const context=await getAccessContext();if(!context)return fail("请先登录",401);
   const body=await request.json() as Record<string,unknown>,action=value(body.action,40),db=getD1(),org=context.organizationId;
   try{
+    if(action==="forecastDraft"){
+      if(!managers.has(context.role))return fail("仅负责人或管理员可以把预测转换为采购草稿",403);
+      const catalogItemId=integer(body.catalogItemId),adjustedSpools=integer(body.adjustedSpools),key=value(body.idempotencyKey,100),adjustmentReason=value(body.adjustmentReason,500);if(!catalogItemId||!adjustedSpools||adjustedSpools>1000||key.length<8)return fail("请填写 1 至 1000 卷的调整数量和有效操作标识");
+      const duplicate=await db.prepare("SELECT r.id,r.request_no requestNo FROM replenishment_forecast_snapshots s JOIN procurement_requests r ON r.id=s.procurement_request_id AND r.organization_id=s.organization_id WHERE s.organization_id=? AND s.idempotency_key=?").bind(org,key).first<{id:number;requestNo:string}>();if(duplicate)return Response.json({...duplicate,idempotent:true});
+      const report=await getReplenishmentForecast(org),forecast=report.forecasts.find(row=>row.catalogItemId===catalogItemId);if(!forecast||forecast.suggestedSpools<=0)return fail("当前预测已变化，请刷新后重新确认",409);
+      const catalog=await db.prepare("SELECT id,legacy_batch_id legacyBatchId,material,color_name colorName,brand,default_net_grams defaultNetGrams FROM material_catalog_items WHERE id=? AND organization_id=?").bind(catalogItemId,org).first<{id:number;legacyBatchId:number|null;material:string;colorName:string;brand:string;defaultNetGrams:number}>();if(!catalog)return fail("耗材主数据不存在",404);
+      const batchId=await ensureCompatibilityBatch(org,catalog),requestNo=`PRF-${Date.now().toString(36).toUpperCase()}`,grams=Math.round(adjustedSpools*catalog.defaultNetGrams*1000)/1000,adjustedCost=forecast.supplierName?supplierOfferCost(adjustedSpools,forecast.unitPriceCentsPerSpool,forecast.taxRateBps,forecast.freightCents).landedTotalCents:0;
+      await db.batch([db.prepare("INSERT INTO procurement_requests(organization_id,request_no,status,reason,requested_by) VALUES(?,?,'draft',?,?)").bind(org,requestNo,`补货预测草稿：${forecast.catalogCode}`,context.email),db.prepare("INSERT INTO procurement_request_items(organization_id,request_id,batch_id,catalog_item_id,requested_grams,suggested_grams,requested_spools,per_spool_net_grams,note) VALUES(?,(SELECT id FROM procurement_requests WHERE organization_id=? AND request_no=?),?,?,?,?,?,?,?)").bind(org,org,requestNo,batchId,catalogItemId,grams,forecast.suggestedSpools*catalog.defaultNetGrams,adjustedSpools,catalog.defaultNetGrams,adjustmentReason),db.prepare("INSERT INTO replenishment_forecast_snapshots(organization_id,procurement_request_id,catalog_item_id,idempotency_key,suggested_spools,adjusted_spools,forecast_cost_cents,risk,confidence,forecast_json,adjustment_reason,created_by) VALUES(?,(SELECT id FROM procurement_requests WHERE organization_id=? AND request_no=?),?,?,?,?,?,?,?,?,?,?)").bind(org,org,requestNo,catalogItemId,key,forecast.suggestedSpools,adjustedSpools,adjustedCost,forecast.risk,forecast.confidence,JSON.stringify(forecast),adjustmentReason,context.email)]);
+      await recordAudit(context,"procurement.forecast.draft.created","procurement_request",requestNo,{catalogItemId,suggestedSpools:forecast.suggestedSpools,adjustedSpools,adjustedCost,key});return Response.json({requestNo,status:"draft"},{status:201});
+    }
     if(action==="supplier"){
       const code=value(body.code,40).toUpperCase(),name=value(body.name,120);if(!code||!name)return fail("请填写供应商编码和名称");
       const row=await db.prepare("INSERT INTO suppliers(organization_id,code,name,contact,phone,email,created_by) VALUES(?,?,?,?,?,?,?) RETURNING id").bind(org,code,name,value(body.contact,80),value(body.phone,40),value(body.email,160),context.email).first<{id:number}>();
@@ -82,6 +93,9 @@ export async function PATCH(request:Request){
   const context=await getAccessContext();if(!context)return fail("请先登录",401);
   const body=await request.json() as Record<string,unknown>,action=value(body.action,40),db=getD1(),org=context.organizationId,now=new Date().toISOString();
   try{
+    if(action==="submitDraft"){
+      const denied=await requireApiAccess(true,"inventory.write");if(denied)return denied;const id=integer(body.requestId),row=await db.prepare("SELECT status FROM procurement_requests WHERE id=? AND organization_id=?").bind(id,org).first<{status:RequestStatus}>();if(!row)return fail("采购草稿不存在",404);if(!canTransitionRequest(row.status,"pending"))return fail("该采购申请已提交或状态不可提交",409);await db.prepare("UPDATE procurement_requests SET status='pending',updated_at=? WHERE id=? AND organization_id=? AND status='draft'").bind(now,id,org).run();await recordAudit(context,"procurement.request.draft.submitted","procurement_request",String(id));return Response.json({id,status:"pending"});
+    }
     if(action==="approve"){
       const denied=await requireApiAccess(true,"write");if(denied)return denied;if(!managers.has(context.role))return fail("仅负责人或管理员可以审批采购申请",403);
       const id=integer(body.requestId),row=await db.prepare("SELECT status FROM procurement_requests WHERE id=? AND organization_id=?").bind(id,org).first<{status:RequestStatus}>();if(!row)return fail("采购申请不存在",404);
