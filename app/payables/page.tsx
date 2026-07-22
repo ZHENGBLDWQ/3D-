@@ -1,0 +1,1 @@
+import {redirect} from "next/navigation";import {can,getAccessContext} from "../access-control";import PayablesClient from "./payables-client";export const dynamic="force-dynamic";export default async function PayablesPage(){const user=await getAccessContext();if(!user||!can(user,"finance.read"))redirect("/");return <PayablesClient/>}
