@@ -340,6 +340,7 @@ td button,
 .today-alert-preview span { color:#ff8258; font-size:9px; font-weight:800; letter-spacing:.12em; }
 .today-alert-preview strong { font-size:11px; }
 .today-alert-preview p { margin:0; color:#93a39c; font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.business-control-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}.business-control-strip a{display:grid;gap:6px;padding:15px 17px;background:#fff;border:1px solid #dfe4e0;border-radius:10px;color:#17211f;text-decoration:none}.business-control-strip span,.business-control-strip small{font-size:10px;color:#76817c}.business-control-strip strong{font-size:20px}.business-control-strip a.warning{border-color:#eacaa3;background:#fffaf2}.business-control-strip a.danger{border-color:#efad99;background:#fff7f3}.business-control-strip a.danger strong{color:#b84425}@media(max-width:900px){.business-control-strip{grid-template-columns:1fr 1fr}}@media(max-width:560px){.business-control-strip{grid-template-columns:1fr}}
 .metric {
   min-height: 126px;
   background: white;
