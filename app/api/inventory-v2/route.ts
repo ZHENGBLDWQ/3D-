@@ -28,8 +28,9 @@ export async function GET(){
       FROM material_catalog_items c LEFT JOIN material_spools s ON s.catalog_item_id=c.id AND s.organization_id=c.organization_id
       LEFT JOIN material_batches b ON b.id=c.legacy_batch_id WHERE c.organization_id=? GROUP BY c.id ORDER BY c.material,c.color_name`).bind(org).all(),
     db.prepare(`SELECT s.id,s.spool_code spoolCode,s.state,s.initial_net_grams initialNetGrams,s.remaining_net_grams remainingNetGrams,s.tare_grams tareGrams,s.last_gross_grams lastGrossGrams,s.rfid_uid rfidUid,s.last_weighed_at lastWeighedAt,s.updated_at updatedAt,
-      c.id catalogItemId,c.catalog_code catalogCode,c.material,c.brand,c.color_name colorName,c.color_code colorCode,c.color_hex colorHex,l.id locationId,l.code locationCode,l.name locationName,l.kind locationKind
-      FROM material_spools s JOIN material_catalog_items c ON c.id=s.catalog_item_id AND c.organization_id=s.organization_id JOIN inventory_locations_v2 l ON l.id=s.current_location_id AND l.organization_id=s.organization_id
+      c.id catalogItemId,c.catalog_code catalogCode,c.material,c.brand,c.color_name colorName,c.color_code colorCode,c.color_hex colorHex,l.id locationId,l.code locationCode,l.name locationName,l.kind locationKind,
+      COALESCE(pl.unit_cost_cents_per_kg,0) unitCostCentsPerKg,(SELECT MAX(m.occurred_at) FROM material_spool_movements m WHERE m.organization_id=s.organization_id AND m.spool_id=s.id AND m.movement_type IN ('consume','loss','weigh')) lastUsedAt
+      FROM material_spools s JOIN material_catalog_items c ON c.id=s.catalog_item_id AND c.organization_id=s.organization_id JOIN inventory_locations_v2 l ON l.id=s.current_location_id AND l.organization_id=s.organization_id LEFT JOIN material_purchase_lots pl ON pl.id=s.purchase_lot_id AND pl.organization_id=s.organization_id
       WHERE s.organization_id=? ORDER BY CASE s.state WHEN 'in_use' THEN 0 WHEN 'open_storage' THEN 1 WHEN 'sealed' THEN 2 ELSE 3 END,s.updated_at DESC`).bind(org).all(),
     db.prepare("SELECT id,code,name,kind,printer_id printerId FROM inventory_locations_v2 WHERE organization_id=? AND active=1 ORDER BY kind,name").bind(org).all(),
     db.prepare("SELECT DISTINCT p.id,p.name,p.model FROM printers p JOIN printer_bindings pb ON pb.printer_id=p.id WHERE pb.organization_id=? ORDER BY p.name").bind(org).all(),
