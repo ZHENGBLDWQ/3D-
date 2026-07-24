@@ -64,6 +64,8 @@ def test_connection(printer, credentials, connection_factory=default_connection_
         return {"ok":False,"device":mask(printer.serial),"error":type(error).__name__}
     finally: close_connection(connection)
 
+test_connection.__test__ = False
+
 
 def main():
     parser = argparse.ArgumentParser(description="LayerTrace Local Hub operations")
