@@ -3,6 +3,7 @@ import "./globals.css";
 import { getSessionUser, needsInitialAdminSetup } from "./session-auth";
 import SetupForm from "./setup-form";
 import { ensureDatabaseSchema } from "../db/ensure-schema";
+import AppShell from "./app-shell";
 
 export const dynamic = "force-dynamic";
 
@@ -42,5 +43,5 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       </section>
     </main></body></html>;
   }
-  return <html lang="zh-CN"><body>{children}</body></html>;
+  return <html lang="zh-CN"><body><AppShell user={user}>{children}</AppShell></body></html>;
 }

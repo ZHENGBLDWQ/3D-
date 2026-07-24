@@ -38,6 +38,7 @@ select:focus-visible {
   min-height: 100vh;
   display: flex;
 }
+.app-frame{min-height:100vh}.app-main{margin-left:232px;min-width:0;min-height:100vh}.app-route-content{min-width:0}.app-frame .shell{display:block;min-height:auto}.app-frame .shell>.sidebar{display:none}.app-frame .shell>.content{margin-left:0}.brand{text-decoration:none}.module-context{position:sticky;top:0;z-index:9;min-height:72px;padding:12px 28px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:28px}.module-context>div:first-child{display:grid;min-width:130px}.module-context small{color:#8a9691;font-size:9px;letter-spacing:.14em}.module-context strong{margin-top:4px;font-size:16px}.module-context-links{display:flex;align-items:center;gap:7px;overflow-x:auto;scrollbar-width:thin}.module-context-links a{flex:none;color:#65726d;text-decoration:none;font-size:12px;font-weight:700;padding:9px 12px;border-radius:8px}.module-context-links a:hover{background:#f1f4f1;color:#172321}.module-context-links a.active{background:#22332f;color:#fff;box-shadow:inset 3px 0 var(--orange)}
 .sidebar {
   position: fixed;
   inset: 0 auto 0 0;
@@ -1356,6 +1357,7 @@ td button {
   .content {
     margin-left: 70px;
   }
+  .app-main{margin-left:70px}.module-context{padding:10px 14px;display:block}.module-context>div:first-child{margin-bottom:8px}.module-context-links{padding-bottom:2px}
   .topbar {
     height: auto;
     padding: 15px 18px;
