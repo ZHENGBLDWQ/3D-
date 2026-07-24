@@ -511,7 +511,7 @@ function Dashboard({
   const [dashboardNow]=useState(()=>Date.now());
   useEffect(()=>{let active=true;const load=()=>Promise.all([fetch("/api/system",{cache:"no-store"}),fetch("/api/alerts",{cache:"no-store"}),fetch("/api/workbench",{cache:"no-store"})]).then(async([systemResponse,alertResponse,workbenchResponse])=>{const [systemResult,alertResult,workbenchResult]=await Promise.all([systemResponse.ok?systemResponse.json():null,alertResponse.ok?alertResponse.json():null,workbenchResponse.ok?workbenchResponse.json():null]);if(active){if(systemResult){setSystemHealth(systemResult.health);setSystemAlerts(systemResult.alerts||[])}if(alertResult)setBusinessAlerts(alertResult.alerts||[]);if(workbenchResult)setWorkbench(workbenchResult)}}).catch(()=>undefined);void load();const timer=window.setInterval(load,30000);return()=>{active=false;window.clearInterval(timer)}},[]);
   const dueSoon=data.orders.filter(order=>order.dueAt&&order.status!=="已完成"&&new Date(order.dueAt).getTime()<=dashboardNow+2*86400000);
-  const activeBusiness=businessAlerts.filter(item=>item.signalActive&&item.status!=="resolved"),varianceAlerts=activeBusiness.filter(item=>item.resourceType==="material_variance"),settlementAlerts=activeBusiness.filter(item=>item.resourceType==="print_session"),feedAlerts=activeBusiness.filter(item=>item.resourceType==="printer_feed"),calibrationAlerts=activeBusiness.filter(item=>item.resourceType==="material_calibration");
+  const activeBusiness=businessAlerts.filter(item=>item.signalActive&&item.status!=="resolved"),settlementAlerts=activeBusiness.filter(item=>item.resourceType==="print_session"),feedAlerts=activeBusiness.filter(item=>item.resourceType==="printer_feed"),calibrationAlerts=activeBusiness.filter(item=>item.resourceType==="material_calibration");
   const tasks:Array<{tone:string;title:string;detail:string;section?:Section;href?:string}>=[
     ...(workbench?.priorities??[]),
     ...(dueSoon.length?[{tone:"danger",title:`${dueSoon.length} 个订单临近或已超过交期`,detail:"优先检查排程与交付承诺",section:"订单" as Section}]:[]),
@@ -519,7 +519,6 @@ function Dashboard({
     ...(metrics.alerts?[{tone:"danger",title:`${metrics.alerts} 项耗材低于安全库存`,detail:"补货、调拨或调整生产计划",section:"耗材库存" as Section}]:[]),
     ...(systemHealth?.offlinePrinters?[{tone:"danger",title:`${systemHealth.offlinePrinters} 台打印机连接异常`,detail:"检查本地 Agent 与局域网连接",section:"设备管理" as Section}]:[]),
     ...((systemHealth?.pendingCommands||systemHealth?.failedCommands)?[{tone:"warning",title:"设备命令需要处理",detail:`超时 ${systemHealth?.pendingCommands||0} · 失败 ${systemHealth?.failedCommands||0}`,section:"系统中心" as Section}]:[]),
-    ...(varianceAlerts.length?[{tone:"danger",title:`${varianceAlerts.length} 张耗材称重差异单待处理`,detail:"库存尚未调整，请核查实际原因",href:"/material-variances"}]:[]),
     ...(settlementAlerts.length?[{tone:"warning",title:`${settlementAlerts.length} 个打印会话尚未完成耗材结算`,detail:"补齐实体卷、分类、层数或称重证据",href:"/settlements"}]:[]),
     ...(feedAlerts.length?[{tone:"danger",title:`${feedAlerts.length} 个供料位置未绑定实体卷`,detail:"绑定前不会自动扣减实际库存",href:"/feed-bindings"}]:[]),
     ...(calibrationAlerts.length?[{tone:"info",title:`${calibrationAlerts.length} 组校准样本仍不足`,detail:"完成至少 3 个有效称重样本",href:"/calibration"}]:[]),

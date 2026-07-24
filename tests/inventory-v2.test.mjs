@@ -32,7 +32,7 @@ test("unknown AMS slots remain warnings and can never guess a spool deduction",a
 test("inventory hub exposes the fixed warehouse and in-use operating areas",async()=>{
  const [page,css]=await Promise.all([read("app/inventory/inventory-v2-client.tsx"),read("app/inventory/inventory-v2.css")]);
  for(const label of ["库存管理","未拆封库存","低库存与补货","采购在途","库存流水","使用中","已开封周转","实时预留与任务结算","辅助工具头","外置料盘"]){assert.match(page,new RegExp(label),label)}
- assert.match(page,/href="\/procurement"/);assert.match(page,/action:"weigh"|value="weigh"/);assert.match(page,/action:"loss"|value="loss"/);assert.match(page,/action:"scrap"|value="scrap"/);
+ assert.match(page,/href="\/procurement"/);assert.doesNotMatch(page,/dialog==="adjust"/);assert.match(page,/线下核对余量请回库存总览编辑实体卷/);
  assert.match(css,/@media\(max-width:700px\)/);
 });
 
@@ -49,7 +49,7 @@ test("legacy stock can only become an issueable spool through an audited physica
  assert.match(api,/action==="confirmLegacySpool"/);assert.match(api,/spool\.state!=="needs_count"/);
  assert.match(api,/inventory_v2\.legacy\.confirmed/);assert.match(api,/历史聚合库存实物盘点并转为实体卷/);
  assert.match(api,/INSERT INTO spool_weight_checks/);assert.match(api,/physicalState/);
- assert.match(page,/历史库存实物盘点/);assert.match(page,/盘点确认/);assert.match(page,/action:"confirmLegacySpool"/);
+ assert.match(page,/历史库存实物核对/);assert.match(page,/盘点确认/);assert.match(page,/action:"confirmLegacySpool"/);
 });
 
 test("serialized spools expose offline labels and scanner-assisted issue selection",async()=>{

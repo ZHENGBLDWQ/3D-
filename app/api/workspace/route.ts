@@ -1,7 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { getD1, getDb } from "../../../db";
 import {
-  materialBatches,
   itemMaterials,
   orderItems,
   orders,
@@ -75,44 +74,6 @@ async function seedIfEmpty(organizationId: number) {
       },
     ])
     .returning();
-  await db.insert(materialBatches).values([
-    {
-      material: "PLA",
-      color: "岩石灰",
-      brand: "Bambu Lab",
-      initialGrams: 1000,
-      remainingGrams: 742,
-      lowStockGrams: 200,
-      costPerKg: 120,
-    },
-    {
-      material: "PETG",
-      color: "碳黑",
-      brand: "eSUN",
-      initialGrams: 1000,
-      remainingGrams: 186,
-      lowStockGrams: 200,
-      costPerKg: 95,
-    },
-    {
-      material: "ABS",
-      color: "深蓝",
-      brand: "Polymaker",
-      initialGrams: 1000,
-      remainingGrams: 524,
-      lowStockGrams: 200,
-      costPerKg: 110,
-    },
-    {
-      material: "TPU",
-      color: "橙色",
-      brand: "Overture",
-      initialGrams: 500,
-      remainingGrams: 94,
-      lowStockGrams: 120,
-      costPerKg: 180,
-    },
-  ]);
   await db.insert(printJobs).values([
     {
       organizationId,
