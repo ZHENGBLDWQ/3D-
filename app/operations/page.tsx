@@ -1,0 +1,7 @@
+import {redirect} from "next/navigation";
+import {getAccessContext,can} from "../access-control";
+import {getProductionReadiness} from "../../operations/readiness";
+import "./readiness.css";
+export const dynamic="force-dynamic";
+const labels={pass:"已通过",warning:"需关注",fail:"阻塞上线"};
+export default async function OperationsPage(){const user=await getAccessContext();if(!user)redirect("/");if(!can(user,"system.manage"))redirect("/settings");const report=await getProductionReadiness(user.organizationId);return <main className="readiness"><header><div><small>PRODUCTION READINESS · OPERATIONS</small><h1>上线检查中心</h1><p>在部署或升级前检查关键依赖、数据保护与设备连接状态。检查只读取状态，不会修改生产数据。</p></div><nav><a href="/settings">系统设置</a><a href="/">返回工作台</a></nav></header><section className={`readiness-score ${report.status}`}><div><span>生产就绪度</span><strong>{report.score}</strong><em>/ 100</em></div><div><b>{report.status==="ready"?"可以上线":report.status==="attention"?"建议处理后上线":"暂不建议上线"}</b><p>最后检查：{new Date(report.generatedAt).toLocaleString("zh-CN")}</p></div></section><section className="readiness-grid">{report.checks.map(check=><article key={check.key} className={check.status}><div><span>{labels[check.status]}</span><i aria-hidden="true">{check.status==="pass"?"✓":"!"}</i></div><h2>{check.label}</h2><p>{check.detail}</p>{check.actionHref&&<a href={check.actionHref}>{check.status==="pass"?"查看详情":"前往处理"} →</a>}</article>)}</section><section className="readiness-boundary"><h2>上线门槛</h2><p>“阻塞上线”表示核心依赖或数据保护措施缺失；“需关注”不会阻止系统运行，但应在正式经营使用前闭环。CI 负责校验代码，页面负责校验当前部署实例，两者不能互相替代。</p></section></main>}
