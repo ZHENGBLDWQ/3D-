@@ -21,8 +21,8 @@ const moduleGroups=[
   {root:"/monitor",label:"实时打印监控",paths:["/monitor","/fleet","/gateways","/settlements","/calibration","/maintenance"],items:[
     {href:"/monitor",label:"实时监控"},{href:"/fleet",label:"设备档案"},{href:"/gateways",label:"通信网关"},{href:"/settlements",label:"打印结算"},{href:"/calibration",label:"称重校准"},{href:"/maintenance",label:"维护保养"},
   ]},
-  {root:"/inventory",label:"耗材库存",paths:["/inventory","/feed-bindings","/material-master","/material-variances","/inventory-value","/procurement","/replenishment-forecast"],items:[
-    {href:"/inventory",label:"库存总览"},{href:"/feed-bindings",label:"使用中耗材"},{href:"/material-master",label:"耗材主数据"},{href:"/material-variances",label:"盘点差异"},{href:"/inventory-value",label:"库存价值"},{href:"/procurement",label:"采购补货"},{href:"/replenishment-forecast",label:"补货预测"},
+  {root:"/inventory",label:"耗材库存",paths:["/inventory","/feed-bindings","/material-master","/inventory-value","/procurement","/replenishment-forecast"],items:[
+    {href:"/inventory",label:"库存总览"},{href:"/feed-bindings",label:"使用中耗材"},{href:"/material-master",label:"耗材主数据"},{href:"/inventory-value",label:"库存价值"},{href:"/procurement",label:"采购补货"},{href:"/replenishment-forecast",label:"补货预测"},
   ]},
   {root:"/costing",label:"成本与定价",paths:["/costing","/settlements","/profit","/quotes"],items:[
     {href:"/costing",label:"成本核算"},{href:"/settlements",label:"打印结算"},{href:"/profit",label:"利润分析"},{href:"/quotes",label:"报价中心"},
@@ -43,7 +43,7 @@ export default function AppShell({children,user}:{children:ReactNode;user:{displ
   return <main className="app-frame">
     <aside className="sidebar app-sidebar">
       <Link className="brand" href="/" aria-label="返回首页">
-        <span className="brand-cube">3D</span><div><strong>层迹</strong><small>PRINT OPS</small></div>
+        <img src="/createx-logo.png" alt="CreateX Creative Tech Lab"/>
       </Link>
       <nav><div className="nav-group"><p className="nav-title">经营管理</p>{primary.map(item=>{
         const active=item.href==="/"?pathname==="/":group?.root===item.href;
